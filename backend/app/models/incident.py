@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, Float, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -24,9 +24,10 @@ class IncidentReport(Base):
     raw_voice_transcript = Column(Text, nullable=False)
     status = Column(String(30), default="DRAFT")           # DRAFT, VALIDATED, DOSSIER_READY
     pdf_dossier_path = Column(String(255), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     farmer = relationship("Farmer", back_populates="incidents")
     land_parcel = relationship("LandParcel", back_populates="incidents")
     photos = relationship("EvidencePhoto", back_populates="incident", cascade="all, delete-orphan")
     checklist = relationship("DocumentChecklist", back_populates="incident", uselist=False, cascade="all, delete-orphan")
+

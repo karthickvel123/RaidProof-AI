@@ -12,3 +12,4 @@ class VoiceSynthesizeRequest(BaseModel):
     text: str = Field(..., description="Text to synthesize")
     language_code: str = Field("ta-IN", description="Language code")
     speed: float = Field(0.95, description="Speaking rate multiplier")
+

@@ -28,3 +28,4 @@ export const AudioWaveform: React.FC<AudioWaveformProps> = ({ volume, isRecordin
     </div>
   );
 };
+

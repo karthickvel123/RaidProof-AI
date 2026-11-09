@@ -49,3 +49,6 @@ backend/static/dossiers/
 # OS Files
 .DS_Store
 Thumbs.db
+
+# Local Pip Cache
+backend/.pip_cache/

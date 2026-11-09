@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, Float, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -15,7 +15,8 @@ class LandParcel(Base):
     total_area_acres = Column(Float, nullable=False)
     primary_crop = Column(String(50), nullable=True)
     tenure_type = Column(String(20), default="OWNER")  # OWNER / TENANT
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     farmer = relationship("Farmer", back_populates="land_parcels")
     incidents = relationship("IncidentReport", back_populates="land_parcel")
+

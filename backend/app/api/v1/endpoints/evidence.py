@@ -16,8 +16,9 @@ async def upload_evidence_photo(
     longitude: float = Form(76.9512)
 ):
     """
-    Uploads evidence photo, extracts EXIF GPS tags, validates proximity,
-    applies tamper-evident GPS watermark, and stores optimized image.
+    Uploads farmer evidence photo, extracts consent-based EXIF / device GPS tags,
+    overlays self-declared metadata banner, and stores optimized image.
+    Does NOT claim to certify or verify photograph authenticity.
     """
     try:
         raw_bytes = await photo_file.read()
@@ -54,7 +55,10 @@ async def upload_evidence_photo(
             "latitude": final_lat,
             "longitude": final_lon,
             "photo_url": f"/static/uploads/{filename}",
-            "is_geotag_verified": True
+            "has_gps": bool(final_lat and final_lon),
+            "location_metadata_source": "consent_device_gps",
+            "is_verified": False
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process photo: {str(e)}")
+

@@ -169,19 +169,21 @@ export function App() {
 
   // Generate Final Dossier
   const handleGenerateDossier = async () => {
-    try {
-      const payload = {
-        farmer_id: 'demo-farmer-01',
-        wildlife_species: extractedData?.wildlife_species || 'ELEPHANT',
-        wildlife_species_tamil: extractedData?.wildlife_species_tamil || 'காட்டு யானை',
-        crop_damaged: extractedData?.crop_damaged || 'BANANA',
-        crop_damaged_tamil: extractedData?.crop_damaged_tamil || 'வாழை',
-        damage_quantity: extractedData?.damage_quantity || 40,
-        damage_unit: extractedData?.damage_unit || 'TREES',
-        damage_unit_tamil: extractedData?.damage_unit_tamil || 'மரங்கள்',
-        raw_voice_transcript: transcript || 'நேத்து ராத்திரி காட்டு யானை வந்து வாழை மரங்களை முறிச்சிருச்சு'
-      };
+    const clientDraftId = 'draft_' + Date.now();
+    const payload = {
+      farmer_id: 'demo-farmer-01',
+      client_draft_id: clientDraftId,
+      wildlife_species: extractedData?.wildlife_species || 'ELEPHANT',
+      wildlife_species_tamil: extractedData?.wildlife_species_tamil || 'காட்டு யானை',
+      crop_damaged: extractedData?.crop_damaged || 'BANANA',
+      crop_damaged_tamil: extractedData?.crop_damaged_tamil || 'வாழை',
+      damage_quantity: extractedData?.damage_quantity || 40,
+      damage_unit: extractedData?.damage_unit || 'TREES',
+      damage_unit_tamil: extractedData?.damage_unit_tamil || 'மரங்கள்',
+      raw_voice_transcript: transcript || 'நேத்து ராத்திரி காட்டு யானை வந்து வாழை மரங்களை முறிச்சிருச்சு'
+    };
 
+    try {
       const res = await fetch('/api/v1/incidents/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -192,10 +194,24 @@ export function App() {
         const result = await res.json();
         setCreatedIncidentCode(result.incident_code);
         setDossierPdfUrl(`/api/v1/dossier/${result.incident_id}/pdf`);
+
+        // Mark local draft as SYNCED to prevent duplicate re-uploads
+        await offlineDb.drafts.where('farmerId').equals('demo-farmer-01').modify({
+          status: 'SYNCED',
+          serverIncidentId: result.incident_code
+        });
       } else {
         setDossierPdfUrl('/api/v1/dossier/sample/pdf');
       }
-    } catch {
+    } catch (netErr) {
+      console.warn('Network offline, queuing incident for sync:', netErr);
+      // Queue offline sync task in Dexie
+      await offlineDb.syncQueue.add({
+        taskType: 'GENERATE_DOSSIER',
+        payloadRefId: clientDraftId,
+        retryCount: 0,
+        lastAttemptAt: Date.now()
+      });
       setDossierPdfUrl('/api/v1/dossier/sample/pdf');
     }
     setCurrentStep('DOSSIER');
@@ -218,7 +234,7 @@ export function App() {
             <h1 className="font-bold text-lg leading-tight flex items-center gap-1.5">
               <span>🌾</span> RaidProof AI
             </h1>
-            <p className="text-[11px] text-emerald-200">வேலி காப்பான் - வனவிலங்கு பயிர்ச்சேத சான்றாய்வு</p>
+            <p className="text-[11px] text-emerald-200">விவசாயிகளுக்கான சுய சான்றாவண உதவியாளர்</p>
           </div>
         </div>
 
@@ -229,6 +245,13 @@ export function App() {
           {language === 'ta' ? 'English' : 'தமிழ்'}
         </button>
       </header>
+
+      {/* Mandatory Regulatory Disclaimer Banner */}
+      <div className="w-full max-w-md bg-amber-50 border-b border-amber-200 px-4 py-1.5 text-center">
+        <p className="text-[10px] text-amber-900 font-medium leading-tight">
+          ⚠️ <b>சுய அறிவிப்பு உதவியாளர்:</b> இது அதிகாரப்பூர்வ அரசு படிவம் அல்லது இழப்பீட்டு ஒப்புதல் அல்ல. விவசாயி ஆதாரங்களை ஒழுங்கமைக்கும் துணை செயலி மட்டுமே.
+        </p>
+      </div>
 
       {/* Main Container */}
       <main className="w-full max-w-md px-4 pt-4 flex-1 flex flex-col">
@@ -242,7 +265,7 @@ export function App() {
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-lg font-bold text-gray-900">வணக்கம், {farmerName} ஐயா!</h2>
-                  <p className="text-xs text-gray-600">வால்பாறை வட்டம் | பட்டா எண்: 1042</p>
+                  <p className="text-xs text-gray-600">வால்பாறை வட்டம் | பட்டா எண்: 1042 (சுய பதிவு)</p>
                 </div>
                 <div className="bg-emerald-100 text-emerald-800 text-xs px-2.5 py-1 rounded-full font-bold">
                   {parcelAcres} ஏக்கர்
@@ -257,7 +280,7 @@ export function App() {
               </div>
               <h3 className="text-xl font-bold mb-1">பயிர்ச்சேதம் ஏற்பட்டதா?</h3>
               <p className="text-xs text-emerald-100 mb-5 leading-relaxed">
-                யானை, காட்டுப்பன்றி தாக்கிய விவரங்களை குரல் மூலம் தமிழில் பேசி 3 நிமிடத்தில் சான்றிதழ் தயார் செய்யவும்.
+                யானை, காட்டுப்பன்றி தாக்கிய விவரங்களை குரல் மூலம் தமிழில் பேசி சுய அறிவிப்பு சான்றாவணம் தயார் செய்யவும்.
               </p>
               <button
                 onClick={() => {
@@ -267,7 +290,7 @@ export function App() {
                 }}
                 className="w-full py-4 bg-amber-500 hover:bg-amber-600 active:scale-98 text-emerald-950 font-bold rounded-2xl shadow-md transition text-base flex items-center justify-center gap-2"
               >
-                <span>புதிய சேத அறிக்கை பதிவு செய்</span>
+                <span>புதிய சேத விபரம் பதிவு செய்</span>
                 <ArrowRight className="w-5 h-5" />
               </button>
             </div>
@@ -275,8 +298,8 @@ export function App() {
             {/* Sample PDF Instant Preview Banner */}
             <div className="bg-white rounded-2xl p-4 border border-emerald-200 shadow-sm flex items-center justify-between">
               <div>
-                <p className="text-xs font-bold text-emerald-900">மாதிரி அறிக்கை (Sample PDF)</p>
-                <p className="text-[11px] text-gray-500">அரசு விதிகளின்படி தயாரான மாதிரி ஆவணம்</p>
+                <p className="text-xs font-bold text-emerald-900">மாதிரி சான்றாவணம் (Sample Dossier PDF)</p>
+                <p className="text-[11px] text-gray-500">சுய அறிவிப்பு மாதிரி ஆவணம் (அரசு படிவம் அல்ல)</p>
               </div>
               <a
                 href="/api/v1/dossier/sample/pdf"
@@ -340,7 +363,7 @@ export function App() {
             <div>
               <div className="text-center mb-2">
                 <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full">
-                  படி 1: குரல் வழி வாக்குமூலம்
+                  படி 1: குரல் வழி சேத விபரம் பதிவு (Voice Intimation)
                 </span>
                 <h2 className="text-xl font-bold text-gray-900 mt-2">என்ன நடந்தது என்று கூறுங்கள்</h2>
                 <p className="text-xs text-gray-600 mt-1">
@@ -377,12 +400,12 @@ export function App() {
                 />
               )}
 
-              {/* Contradiction Warnings */}
+              {/* Review & Clarification Prompts */}
               {contradictions.length > 0 && (
                 <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 my-3 text-xs text-amber-950">
                   <div className="flex items-center gap-1.5 font-bold text-amber-900 mb-1">
                     <AlertTriangle className="w-4 h-4 text-amber-600" />
-                    <span>சரிபார்ப்பு எச்சரிக்கை (Contradiction Alert)</span>
+                    <span>விவர சரிபார்ப்பு குறிப்பு (Review & Clarification Note)</span>
                   </div>
                   {contradictions.map((c, i) => (
                     <p key={i} className="mt-1 leading-relaxed">{c.prompt_ta}</p>
@@ -534,11 +557,11 @@ export function App() {
             <div>
               <div className="text-center mb-3">
                 <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full">
-                  படி 3: அரசு ஆவண சரிபார்ப்பு
+                  படி 3: ஆவணங்கள் சரிபார்ப்பு பட்டியல்
                 </span>
                 <h2 className="text-xl font-bold text-gray-900 mt-2">இணைக்க வேண்டிய ஆவணங்கள்</h2>
                 <p className="text-xs text-gray-600 mt-1">
-                  வனத்துறை இழப்பீடு பெற உங்களிடம் உள்ள ஆவணங்களை சரிபார்க்கவும்.
+                  விண்ணப்பத்துடன் இணைக்க உங்களிடம் உள்ள ஆவணங்களை உறுதிப்படுத்தவும்.
                 </p>
               </div>
 
@@ -609,7 +632,7 @@ export function App() {
                 onClick={handleGenerateDossier}
                 className="w-full py-4 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-2xl shadow-md transition flex items-center justify-center gap-2"
               >
-                <span>அதிகாரப்பூர்வ அறிக்கை உருவாக்க (Generate PDF)</span>
+                <span>சுய சான்றாவணம் உருவாக்க (Generate Evidence Dossier PDF)</span>
                 <ArrowRight className="w-5 h-5" />
               </button>
             </div>
@@ -628,13 +651,13 @@ export function App() {
 
               <h2 className="text-xl font-bold text-gray-900">சான்றாவணம் தயாரானது!</h2>
               <p className="text-xs text-gray-600 mt-1">
-                தமிழ்நாடு வனத்துறை வடிவமைப்புடன் கூடிய சான்றாவணம் வெற்றிகரமாக உருவாக்கப்பட்டது.
+                சுய அறிவிப்பு சான்றாவணம் வெற்றிகரமாக உருவாக்கப்பட்டது (அரசு படிவம் அல்ல - விவசாயி சான்றுத் தொகுப்பு).
               </p>
 
               {/* Dossier Code Card */}
               <div className="bg-white rounded-2xl p-4 border border-emerald-200 shadow-sm my-4 text-left">
                 <div className="flex items-center justify-between border-b pb-2 mb-2">
-                  <span className="text-xs text-gray-500 font-medium">அறிக்கை எண் (Dossier ID):</span>
+                  <span className="text-xs text-gray-500 font-medium">சான்றாவண எண் (Dossier ID):</span>
                   <span className="text-xs font-bold font-mono text-emerald-900">{createdIncidentCode}</span>
                 </div>
                 <div className="flex items-center justify-between border-b pb-2 mb-2">
@@ -644,8 +667,8 @@ export function App() {
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500 font-medium">புவிக்குறியீடு (GPS):</span>
-                  <span className="text-xs font-bold text-gray-900">10.3245° N, 76.9512° E</span>
+                  <span className="text-xs text-gray-500 font-medium">ஒப்புதல் இருப்பிட தகவல் (GPS):</span>
+                  <span className="text-xs font-bold text-gray-900">10.3245° N, 76.9512° E (±8 மீ)</span>
                 </div>
               </div>
 

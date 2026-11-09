@@ -1,24 +1,29 @@
 from typing import List
 from app.schemas.incident import (
     IncidentExtraction,
-    ContradictionFlag,
+    ReviewFlag,
     WildlifeSpecies,
     CropCategory,
     DamageUnit
 )
 
-class ContradictionAuditor:
+class DomainReviewAuditor:
     """
-    Deterministic Biological, Agricultural Density and Statutory Rule Auditor.
-    Pre-emptively prevents forest department claim rejections and disputes.
+    Neutral Agricultural Domain & Consistency Review Assistant.
+    Provides non-judgmental clarification prompts to help farmers review details
+    before filing their self-declared evidence dossier.
+    
+    IMPORTANT:
+    This assistant does NOT verify wildlife identity, authenticate photographs,
+    confirm GPS validity, or determine compensation approval.
     """
 
-    # Maximum realistic densities per acre in Tamil Nadu agriculture
-    DENSITY_LIMITS = {
-        CropCategory.BANANA: 1200.0,   # Max banana plants per acre
-        CropCategory.COCONUT: 80.0,    # Max yielding coconut trees per acre
-        CropCategory.SUGARCANE: 1.0,   # Acre limit
-        CropCategory.PADDY: 1.0,       # Acre limit
+    # Agricultural planting density reference benchmarks (approximate agronomic ranges per acre)
+    DENSITY_BENCHMARKS = {
+        CropCategory.BANANA: 1200.0,   # Typical max plant population per acre
+        CropCategory.COCONUT: 80.0,    # Standard bearing palm spacing per acre
+        CropCategory.SUGARCANE: 1.0,   # Acre area reference
+        CropCategory.PADDY: 1.0,       # Acre area reference
     }
 
     @classmethod
@@ -27,25 +32,32 @@ class ContradictionAuditor:
         extracted: IncidentExtraction,
         parcel_acres: float = 2.5,
         hours_since_incident: float = 12.0
-    ) -> List[ContradictionFlag]:
-        flags: List[ContradictionFlag] = []
+    ) -> List[ReviewFlag]:
+        flags: List[ReviewFlag] = []
 
-        # 1. Biological Impossibility: Wild Boar vs. Mature Coconut Palms
+        # 1. Neutral Clarification: Wild Boar Feeding Pattern vs. Palms
         if (
             extracted.wildlife_species == WildlifeSpecies.WILD_BOAR
             and extracted.crop_damaged == CropCategory.COCONUT
             and extracted.damage_unit == DamageUnit.TREES
         ):
             flags.append(
-                ContradictionFlag(
-                    code="BIO_PLAUSIBILITY_BOAR_COCONUT",
-                    severity="CRITICAL",
-                    message_en="Wild boars cannot uproot mature yielding coconut trees. They only damage saplings (<1 year) or fallen coconuts.",
-                    prompt_ta="காட்டுப்பன்றிகள் பெரிய தென்னை மரங்களை சாய்க்க வாய்ப்பில்லை. சேதமடைந்தது இளங்கன்றுகளா அல்லது கீழே விழுந்த தேங்காய்களா என்று உறுதிப்படுத்தவும்."
+                ReviewFlag(
+                    code="REVIEW_DAMAGE_PATTERN_BOAR_PALM",
+                    severity="REVIEW",
+                    message_en=(
+                        "Clarification note: Wild boar foraging typically impacts young saplings, "
+                        "root zones, or fallen nuts. Please confirm whether the damage observed "
+                        "was to young saplings or fallen produce."
+                    ),
+                    prompt_ta=(
+                        "காட்டுப்பன்றி சேதம் பொதுவாக இளங்கன்றுகள், வேர்ப்பகுதி அல்லது கீழே விழுந்த தேங்காய்களில் காணப்படும். "
+                        "சேதமடைந்தது இளங்கன்றுகளா அல்லது மரங்களா என்பதை தயவுசெய்து உறுதிப்படுத்தவும்."
+                    )
                 )
             )
 
-        # 2. Biological Impossibility: Peafowl vs. Mature Wood/Tree Felling
+        # 2. Neutral Clarification: Peafowl Feeding Pattern vs. Trees
         if (
             extracted.wildlife_species == WildlifeSpecies.PEAFOWL
             and extracted.crop_damaged in [CropCategory.COCONUT, CropCategory.BANANA]
@@ -53,55 +65,85 @@ class ContradictionAuditor:
             and extracted.damage_quantity > 5
         ):
             flags.append(
-                ContradictionFlag(
-                    code="BIO_PLAUSIBILITY_PEAFOWL_TREES",
-                    severity="CRITICAL",
-                    message_en="Peafowls eat seeds, tender shoots, and small fruits. They cannot fell mature trees.",
-                    prompt_ta="மயில்கள் தானியங்கள் மற்றும் இளந்தளிர்களை மட்டுமே சேதப்படுத்தும். மரங்களை சாய்க்காது. சேத விவரத்தை தெளிவுபடுத்தவும்."
+                ReviewFlag(
+                    code="REVIEW_DAMAGE_PATTERN_PEAFOWL",
+                    severity="REVIEW",
+                    message_en=(
+                        "Clarification note: Peafowl feeding typically affects seeds, tender shoots, "
+                        "or standing grains. Please describe the specific nature of crop damage observed."
+                    ),
+                    prompt_ta=(
+                        "மயில்கள் பொதுவாக தானியங்கள் அல்லது இளந்தளிர்களை உண்ணும். "
+                        "உங்கள் பயிரில் ஏற்பட்ட சேதத்தின் தன்மையை தயவுசெய்து மேலும் விவரிக்கவும்."
+                    )
                 )
             )
 
-        # 3. Density Limit Check: Banana
+        # 3. Density Benchmark Reference: Banana
         if (
             extracted.crop_damaged == CropCategory.BANANA
             and extracted.damage_unit in [DamageUnit.TREES, DamageUnit.PLANTS]
         ):
-            max_allowed = parcel_acres * cls.DENSITY_LIMITS[CropCategory.BANANA]
-            if extracted.damage_quantity > max_allowed:
+            benchmark = parcel_acres * cls.DENSITY_BENCHMARKS[CropCategory.BANANA]
+            if extracted.damage_quantity > benchmark:
                 flags.append(
-                    ContradictionFlag(
-                        code="DENSITY_EXCEEDED_BANANA",
-                        severity="WARNING",
-                        message_en=f"Claimed {int(extracted.damage_quantity)} banana plants exceeds maximum possible density ({int(max_allowed)}) for {parcel_acres} acres on your Patta record.",
-                        prompt_ta=f"உங்கள் பட்டா நில அளவு {parcel_acres} ஏக்கர். அதில் அதிகபட்சம் {int(max_allowed)} வாழைகளே இருக்கும். சேதமடைந்த மரங்களின் எண்ணிக்கையை மீண்டும் சரிபார்க்கவும்."
+                    ReviewFlag(
+                        code="REVIEW_DENSITY_BENCHMARK_BANANA",
+                        severity="REVIEW",
+                        message_en=(
+                            f"Acreage benchmark note: Standard banana cultivation typically accommodates ~{int(benchmark)} "
+                            f"plants for a {parcel_acres} acre parcel. Please review the reported quantity ({int(extracted.damage_quantity)}) "
+                            f"or confirm if multiple plots were affected."
+                        ),
+                        prompt_ta=(
+                            f"ஒரு ஏக்கருக்கு வழக்கமாக 1,000-1,200 வாழை மரங்கள் வரை இருக்கும். "
+                            f"உங்கள் {parcel_acres} ஏக்கர் நிலத்திற்கு {int(extracted.damage_quantity)} மரங்கள் என்பது "
+                            f"வழக்கமான அளவைவிட கூடுதலாக உள்ளதால், எண்ணிக்கையை மீண்டும் ஒருமுறை சரிபார்த்துக் கொள்ளவும்."
+                        )
                     )
                 )
 
-        # 4. Density Limit Check: Coconut
+        # 4. Density Benchmark Reference: Coconut
         if (
             extracted.crop_damaged == CropCategory.COCONUT
             and extracted.damage_unit == DamageUnit.TREES
         ):
-            max_allowed = parcel_acres * cls.DENSITY_LIMITS[CropCategory.COCONUT]
-            if extracted.damage_quantity > max_allowed:
+            benchmark = parcel_acres * cls.DENSITY_BENCHMARKS[CropCategory.COCONUT]
+            if extracted.damage_quantity > benchmark:
                 flags.append(
-                    ContradictionFlag(
-                        code="DENSITY_EXCEEDED_COCONUT",
-                        severity="WARNING",
-                        message_en=f"Claimed {int(extracted.damage_quantity)} coconut trees exceeds realistic limit ({int(max_allowed)}) for {parcel_acres} acres.",
-                        prompt_ta=f"உங்கள் {parcel_acres} ஏக்கர் நிலத்தில் பொதுவாக {int(max_allowed)} தென்னை மரங்களே இருக்கும். சேதமடைந்த மரங்களை சரிசெய்யவும்."
+                    ReviewFlag(
+                        code="REVIEW_DENSITY_BENCHMARK_COCONUT",
+                        severity="REVIEW",
+                        message_en=(
+                            f"Acreage benchmark note: Typical bearing coconut spacing accommodates ~{int(benchmark)} "
+                            f"palms for a {parcel_acres} acre parcel. Please review if the reported count ({int(extracted.damage_quantity)}) "
+                            f"includes saplings or multiple holdings."
+                        ),
+                        prompt_ta=(
+                            f"உங்கள் {parcel_acres} ஏக்கர் நிலத்தில் வழக்கமாக சுமார் {int(benchmark)} தென்னை மரங்கள் வரை இருக்கலாம். "
+                            f"குறிப்பிடப்பட்ட {int(extracted.damage_quantity)} மரங்கள் என்ற எண்ணிக்கையை மீண்டும் ஒருமுறை சரிபார்க்கவும்."
+                        )
                     )
                 )
 
-        # 5. Statutory Time Window Notice (>72 Hours)
+        # 5. Reporting Timeline Advisory (>72 Hours)
         if hours_since_incident > 72.0:
             flags.append(
-                ContradictionFlag(
-                    code="STATUTORY_WINDOW_EXPIRED",
-                    severity="WARNING",
-                    message_en="Incident occurred more than 72 hours ago. Forest department inspection circulars require immediate reporting.",
-                    prompt_ta="சம்பவம் நடந்து 72 மணி நேரத்திற்கு மேலாகிவிட்டது. வனத்துறையின் நேரடி ஆய்வுக்கு தாமதத்திற்கான காரணம் தேவைப்படலாம்."
+                ReviewFlag(
+                    code="REVIEW_TIMELINE_ADVISORY",
+                    severity="INFO",
+                    message_en=(
+                        "Timeline advisory: Prompt reporting is recommended for timely field inspections. "
+                        "For incidents over 72 hours old, ground inspection officers may request explanation of the delay."
+                    ),
+                    prompt_ta=(
+                        "சம்பவம் நடந்து 72 மணி நேரத்திற்கு மேலாகியுள்ளதால், அதிகாரிகளிடம் சமர்ப்பிக்கும் போது "
+                        "தாமதத்திற்கான காரணத்தைக் குறிப்பிட நேரிடலாம்."
+                    )
                 )
             )
 
         return flags
+
+# Backward compatibility alias
+ContradictionAuditor = DomainReviewAuditor

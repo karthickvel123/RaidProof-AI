@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -17,7 +17,8 @@ class Farmer(Base):
     aadhaar_last4 = Column(String(4), nullable=True)
     bank_account_masked = Column(String(30), nullable=True)
     bank_ifsc = Column(String(15), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     land_parcels = relationship("LandParcel", back_populates="farmer", cascade="all, delete-orphan")
     incidents = relationship("IncidentReport", back_populates="farmer", cascade="all, delete-orphan")
+

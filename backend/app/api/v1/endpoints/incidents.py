@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +14,7 @@ router = APIRouter(prefix="/incidents", tags=["Incidents"])
 
 class IncidentCreatePayload(BaseModel):
     farmer_id: str
+    client_draft_id: Optional[str] = None
     wildlife_species: str
     wildlife_species_tamil: Optional[str] = None
     crop_damaged: str
@@ -30,6 +31,24 @@ async def create_incident(
     db: AsyncSession = Depends(get_db)
 ):
     try:
+        # Duplicate Prevention: Check if exact same transcript for same farmer was recently submitted
+        existing_q = await db.execute(
+            select(IncidentReport).where(
+                IncidentReport.farmer_id == payload.farmer_id,
+                IncidentReport.raw_voice_transcript == payload.raw_voice_transcript
+            )
+        )
+        existing = existing_q.scalars().first()
+        if existing:
+            return {
+                "success": True,
+                "incident_id": existing.id,
+                "incident_code": existing.incident_code,
+                "status": existing.status,
+                "duplicate_prevented": True,
+                "message": "Existing incident record matched. Duplicate submission prevented."
+            }
+
         count_res = await db.execute(select(IncidentReport))
         existing_count = len(count_res.scalars().all())
         incident_code = f"RPD-2026-VAL-{existing_count + 1:03d}"
@@ -46,7 +65,7 @@ async def create_incident(
             damage_unit=payload.damage_unit,
             damage_unit_tamil=payload.damage_unit_tamil,
             raw_voice_transcript=payload.raw_voice_transcript,
-            incident_timestamp=payload.incident_timestamp or datetime.utcnow(),
+            incident_timestamp=payload.incident_timestamp or datetime.now(timezone.utc),
             status="DRAFT"
         )
         db.add(incident)
@@ -70,7 +89,8 @@ async def create_incident(
             "success": True,
             "incident_id": incident.id,
             "incident_code": incident.incident_code,
-            "status": incident.status
+            "status": incident.status,
+            "duplicate_prevented": False
         }
     except Exception as e:
         await db.rollback()
@@ -95,3 +115,4 @@ async def list_incidents(db: AsyncSession = Depends(get_db)):
         }
         for inc in incidents
     ]
+

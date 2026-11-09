@@ -45,3 +45,4 @@ def test_generate_pdf_dossier():
     pdf_path = DossierPDFGenerator.generate(sample_data, "test_dossier.pdf")
     assert os.path.exists(pdf_path)
     assert os.path.getsize(pdf_path) > 1000  # Non-trivial PDF generated
+

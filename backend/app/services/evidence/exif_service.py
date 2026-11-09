@@ -1,14 +1,15 @@
 import io
 import math
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, Tuple, Optional
 from PIL import Image, ImageDraw, ImageFont
 import piexif
 
 class ExifService:
     """
-    Handles EXIF metadata extraction, GPS coordinate parsing,
-    parcel proximity verification, and visual timestamp watermarking.
+    Handles EXIF metadata extraction, consent-based GPS coordinate parsing,
+    parcel proximity reference checking, and visual metadata watermarking.
+    Does NOT claim to guarantee photograph or GPS authenticity.
     """
 
     @staticmethod
@@ -54,14 +55,14 @@ class ExifService:
                 "has_exif": True,
                 "latitude": lat,
                 "longitude": lon,
-                "timestamp_device": timestamp_str or datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+                "timestamp_device": timestamp_str or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
             }
         except Exception:
             return {
                 "has_exif": False,
                 "latitude": None,
                 "longitude": None,
-                "timestamp_device": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+                "timestamp_device": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
             }
 
     @staticmethod
@@ -90,8 +91,8 @@ class ExifService:
         label: str = "FIELD DAMAGE"
     ) -> bytes:
         """
-        Downscales the image to a mobile-friendly size (max 1600x1200) and burns in
-        a GPS watermark badge at the bottom for tamper-evident printing.
+        Downscales the image to a mobile-friendly size (max 1600x1200) and overlays
+        a farmer metadata banner at the bottom for record clarity.
         """
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         image.thumbnail((1600, 1200), Image.Resampling.LANCZOS)
@@ -106,9 +107,10 @@ class ExifService:
             fill=(0, 0, 0, 200)
         )
 
-        watermark_text = f"RAIDPROOF AI | {label} | GPS: {latitude:.6f}N, {longitude:.6f}E | TIME: {timestamp_str}"
+        watermark_text = f"RAIDPROOF AI | SELF-REPORTED EVIDENCE | {label} | GPS: {latitude:.5f}°N, {longitude:.5f}°E | TIME: {timestamp_str}"
         draw.text((12, height - banner_height + 12), watermark_text, fill=(255, 255, 255))
 
         out_buffer = io.BytesIO()
         image.save(out_buffer, format="JPEG", quality=80, optimize=True)
         return out_buffer.getvalue()
+

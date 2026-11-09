@@ -11,3 +11,4 @@ def get_voice_service() -> VoiceGateway:
     return GnaniVoiceService()
 
 __all__ = ["VoiceGateway", "MockVoiceService", "GnaniVoiceService", "get_voice_service"]
+

@@ -68,17 +68,26 @@ class IncidentExtraction(BaseModel):
         description="Specific nature of damage (trampling, uprooting, eating, root digging)"
     )
 
-class ContradictionFlag(BaseModel):
+class ReviewFlag(BaseModel):
     code: str
-    severity: str  # CRITICAL or WARNING
+    severity: str  # "REVIEW" or "INFO"
     message_en: str
     prompt_ta: str
+
+# Backward compatibility alias
+ContradictionFlag = ReviewFlag
 
 class IncidentListenResponse(BaseModel):
     transcript: str
     draft_id: Optional[str] = None
     extracted: IncidentExtraction
-    contradictions: List[ContradictionFlag] = []
+    contradictions: List[ReviewFlag] = Field(default_factory=list, description="Neutral review flags for clarification")
+    review_flags: List[ReviewFlag] = Field(default_factory=list, description="Neutral review flags for clarification")
     spoken_response_text: str
     spoken_response_audio_url: Optional[str] = None
-    next_step: str  # CAPTURE_PHOTOS, RESOLVE_CONTRADICTION, or REVIEW
+    next_step: str  # CAPTURE_PHOTOS, REVIEW_DETAILS
+    disclaimer: str = (
+        "சுய அறிவிப்பு சான்றாவணம். அரசு ஒப்புதலோ, இழப்பீட்டு உத்தரவாதமோ அல்ல. "
+        "Self-declared evidence compilation. Not an official verification or compensation guarantee."
+    )
+

@@ -43,12 +43,12 @@ class ConversationOrchestrator:
         )
 
         # 4. Formulate spoken response & next step
-        critical_flags = [f for f in contradictions if f.severity == "CRITICAL"]
-        if critical_flags:
-            spoken_text = f"வணக்கம் {farmer_name} ஐயா. {critical_flags[0].prompt_ta}"
-            next_step = "RESOLVE_CONTRADICTION"
+        review_flags = [f for f in contradictions if f.severity in ["REVIEW", "CRITICAL", "WARNING"]]
+        if review_flags:
+            spoken_text = f"வணக்கம் {farmer_name} ஐயா. {review_flags[0].prompt_ta}"
+            next_step = "REVIEW_DETAILS"
         else:
-            # All clear or mild warning
+            # All clear
             crop_name = extracted.crop_damaged_tamil or extracted.crop_damaged.value
             animal_name = extracted.wildlife_species_tamil or extracted.wildlife_species.value
             unit_name = extracted.damage_unit_tamil or extracted.damage_unit.value
@@ -85,7 +85,9 @@ class ConversationOrchestrator:
             transcript=transcript,
             extracted=extracted,
             contradictions=contradictions,
+            review_flags=contradictions,
             spoken_response_text=spoken_text,
             spoken_response_audio_url=audio_url,
             next_step=next_step
         )
+

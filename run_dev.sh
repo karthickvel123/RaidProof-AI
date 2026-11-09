@@ -26,3 +26,4 @@ echo ""
 
 trap "kill $BACKEND_PID $FRONTEND_PID" EXIT
 wait
+

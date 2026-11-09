@@ -32,7 +32,9 @@ class MockVoiceService(VoiceGateway):
                 "transcript": "",
                 "confidence": 0.0,
                 "language": language_code,
-                "status": "empty_audio"
+                "status": "empty_audio",
+                "provider": "mock_voice_service",
+                "mode": "MOCK"
             }
 
         return {
@@ -40,7 +42,8 @@ class MockVoiceService(VoiceGateway):
             "confidence": 0.94,
             "language": language_code,
             "status": "success",
-            "provider": "mock"
+            "provider": "mock_voice_service",
+            "mode": "MOCK"
         }
 
     async def synthesize_speech(
@@ -74,3 +77,4 @@ class MockVoiceService(VoiceGateway):
             wav_file.writeframes(frames)
             
         return buffer.getvalue()
+

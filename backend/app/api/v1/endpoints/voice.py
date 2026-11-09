@@ -69,3 +69,4 @@ async def voice_synthesize(
         speed=speed
     )
     return Response(content=audio_bytes, media_type="audio/wav")
+

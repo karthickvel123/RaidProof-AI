@@ -139,3 +139,4 @@ async def generate_incident_dossier(
         media_type="application/pdf",
         filename=f"RaidProof_Dossier_{incident.incident_code}.pdf"
     )
+

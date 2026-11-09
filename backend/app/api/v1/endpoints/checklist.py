@@ -33,3 +33,4 @@ async def update_checklist(
 
     await db.commit()
     return {"success": True, "message": "Checklist updated"}
+

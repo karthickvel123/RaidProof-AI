@@ -29,3 +29,4 @@ RaidProof AI is an evidence preparation assistant designed for smallholder India
 
 ## Documentation
 - [Product Requirements Blueprint](docs/IMPLEMENTATION_PLAN.md)
+

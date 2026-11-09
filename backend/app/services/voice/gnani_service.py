@@ -18,16 +18,19 @@ AGRI_VOCABULARY: List[str] = [
 class GnaniVoiceService(VoiceGateway):
     """
     Production Voice Integration for Gnani Prisma v3.0 (STT) and Gnani Timbre v3.0 (TTS).
-    Includes automatic graceful fallback to MockVoiceService when credentials are absent or network fails.
+    Strictly separates Real Gnani mode from Mock mode:
+    - If USE_MOCK_VOICE=True, uses MockVoiceService explicitly.
+    - If USE_MOCK_VOICE=False, executes real API calls and raises explicit errors on failure.
+      NEVER silently falls back to mock mode on real API failure.
     """
 
     def __init__(self):
         self.base_url = settings.GNANI_BASE_URL.rstrip("/")
         self.api_key = settings.GNANI_API_KEY
-        self.fallback = MockVoiceService()
+        self.mock_service = MockVoiceService()
 
-    def _has_credentials(self) -> bool:
-        return bool(self.api_key and self.api_key.strip() and not settings.USE_MOCK_VOICE)
+    def is_mock_mode(self) -> bool:
+        return bool(settings.USE_MOCK_VOICE)
 
     async def transcribe_speech(
         self,
@@ -40,9 +43,18 @@ class GnaniVoiceService(VoiceGateway):
         Transcribes farmer speech using Gnani Prisma v3.0 via Vachana API.
         POST https://api.vachana.ai/stt/v3
         """
-        if not self._has_credentials():
-            logger.info("Using MockVoiceService for STT (no Gnani API key configured or USE_MOCK_VOICE=True).")
-            return await self.fallback.transcribe_speech(audio_bytes, filename, content_type, language_code)
+        if self.is_mock_mode():
+            logger.info("Operating in explicit MOCK voice mode (USE_MOCK_VOICE=True).")
+            res = await self.mock_service.transcribe_speech(audio_bytes, filename, content_type, language_code)
+            res["mode"] = "MOCK"
+            return res
+
+        # Real Gnani API Mode
+        if not self.api_key or not self.api_key.strip():
+            raise RuntimeError(
+                "Gnani Prisma STT Error: GNANI_API_KEY is not set or empty, "
+                "while USE_MOCK_VOICE=False. Set GNANI_API_KEY or set USE_MOCK_VOICE=True."
+            )
 
         headers = {
             "X-API-Key-ID": self.api_key
@@ -76,17 +88,25 @@ class GnaniVoiceService(VoiceGateway):
                         "confidence": confidence,
                         "language": language_code,
                         "status": "success",
-                        "provider": "gnani_prisma_v3"
+                        "provider": "gnani_prisma_v3",
+                        "mode": "REAL"
                     }
                 else:
-                    logger.warning(
-                        f"Gnani Prisma returned status {response.status_code}: {response.text}. Falling back to mock."
+                    err_msg = (
+                        f"Gnani Prisma STT API returned error status {response.status_code}: "
+                        f"{response.text[:200]}"
                     )
-                    return await self.fallback.transcribe_speech(audio_bytes, filename, content_type, language_code)
+                    logger.error(err_msg)
+                    # Never fall back to mock silently on real API failure!
+                    raise RuntimeError(err_msg)
 
         except Exception as exc:
-            logger.error(f"Gnani Prisma STT request failed: {exc}. Falling back to mock.")
-            return await self.fallback.transcribe_speech(audio_bytes, filename, content_type, language_code)
+            if isinstance(exc, RuntimeError):
+                raise exc
+            err_msg = f"Gnani Prisma STT network/connection failure: {str(exc)}"
+            logger.error(err_msg)
+            # Never fall back to mock silently on real API failure!
+            raise RuntimeError(err_msg) from exc
 
     async def synthesize_speech(
         self,
@@ -98,9 +118,16 @@ class GnaniVoiceService(VoiceGateway):
         Synthesizes spoken audio using Gnani Timbre v3.0 via Vachana API.
         POST https://api.vachana.ai/api/v1/tts/inference
         """
-        if not self._has_credentials():
-            logger.info("Using MockVoiceService for TTS (no Gnani API key configured or USE_MOCK_VOICE=True).")
-            return await self.fallback.synthesize_speech(text, language_code, speed)
+        if self.is_mock_mode():
+            logger.info("Operating in explicit MOCK voice mode (USE_MOCK_VOICE=True).")
+            return await self.mock_service.synthesize_speech(text, language_code, speed)
+
+        # Real Gnani API Mode
+        if not self.api_key or not self.api_key.strip():
+            raise RuntimeError(
+                "Gnani Timbre TTS Error: GNANI_API_KEY is not set or empty, "
+                "while USE_MOCK_VOICE=False. Set GNANI_API_KEY or set USE_MOCK_VOICE=True."
+            )
 
         headers = {
             "X-API-Key-ID": self.api_key,
@@ -127,18 +154,25 @@ class GnaniVoiceService(VoiceGateway):
                     content_type = response.headers.get("content-type", "")
                     if "application/json" in content_type:
                         data = response.json()
-                        # Base64 decoded or audio URL download
                         import base64
                         raw_b64 = data.get("audio_data") or data.get("audio") or ""
                         if raw_b64:
                             return base64.b64decode(raw_b64)
                     return response.content
                 else:
-                    logger.warning(
-                        f"Gnani Timbre returned status {response.status_code}: {response.text}. Falling back to mock."
+                    err_msg = (
+                        f"Gnani Timbre TTS API returned error status {response.status_code}: "
+                        f"{response.text[:200]}"
                     )
-                    return await self.fallback.synthesize_speech(text, language_code, speed)
+                    logger.error(err_msg)
+                    # Never fall back to mock silently on real API failure!
+                    raise RuntimeError(err_msg)
 
         except Exception as exc:
-            logger.error(f"Gnani Timbre TTS request failed: {exc}. Falling back to mock.")
-            return await self.fallback.synthesize_speech(text, language_code, speed)
+            if isinstance(exc, RuntimeError):
+                raise exc
+            err_msg = f"Gnani Timbre TTS network/connection failure: {str(exc)}"
+            logger.error(err_msg)
+            # Never fall back to mock silently on real API failure!
+            raise RuntimeError(err_msg) from exc
+

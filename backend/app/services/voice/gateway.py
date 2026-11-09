@@ -38,3 +38,4 @@ class VoiceGateway(ABC):
         Synthesizes Tamil or English text into natural spoken audio bytes (WAV/MP3).
         """
         pass
+

@@ -45,3 +45,4 @@ async def test_sample_dossier_pdf_api():
         assert response.status_code == 200
         assert response.headers["content-type"] == "application/pdf"
         assert len(response.content) > 1000
+

@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, Float, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -14,7 +14,8 @@ class EvidencePhoto(Base):
     gps_latitude = Column(Float, nullable=False)
     gps_longitude = Column(Float, nullable=False)
     photo_taken_at = Column(DateTime, nullable=False)
-    is_geotag_verified = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    has_consent_location_metadata = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     incident = relationship("IncidentReport", back_populates="photos")
+

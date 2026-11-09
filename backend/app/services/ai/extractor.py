@@ -185,3 +185,4 @@ class IncidentExtractor:
             incident_time_approx=time_approx,
             attack_pattern="பயிர் மிதித்து மற்றும் முறித்து சேதம் செய்யப்பட்டது"
         )
+
