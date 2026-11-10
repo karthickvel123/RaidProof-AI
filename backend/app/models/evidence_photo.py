@@ -14,6 +14,7 @@ class EvidencePhoto(Base):
     gps_latitude = Column(Float, nullable=True)
     gps_longitude = Column(Float, nullable=True)
     gps_accuracy = Column(Float, nullable=True)
+    location_source = Column(String(50), nullable=True, default="none")
     photo_taken_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     has_consent_location_metadata = Column(Boolean, default=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

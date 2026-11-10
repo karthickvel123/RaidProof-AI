@@ -9,10 +9,10 @@ class LandParcel(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     farmer_id = Column(String(36), ForeignKey("farmers.id"), nullable=False, index=True)
-    survey_number = Column(String(50), nullable=False)
+    survey_number = Column(String(50), nullable=True)
     sub_division = Column(String(20), nullable=True)
-    patta_number = Column(String(50), nullable=False)
-    total_area_acres = Column(Float, nullable=False)
+    patta_number = Column(String(50), nullable=True)
+    total_area_acres = Column(Float, nullable=True)
     primary_crop = Column(String(50), nullable=True)
     tenure_type = Column(String(20), default="OWNER")  # OWNER / TENANT
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

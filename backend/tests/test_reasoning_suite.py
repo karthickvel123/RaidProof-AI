@@ -36,21 +36,21 @@ async def test_incident_extractor_tamil():
     assert extracted.damage_unit == DamageUnit.TREES
 
 @pytest.mark.asyncio
-async def test_review_flag_wildlife_pattern():
-    # Wild Boar reported with coconut trees -> raises neutral review clarification
+async def test_neutral_clarification_unspecified_wildlife():
+    # When species is OTHER, auditor provides supportive clarification without rejecting
     data = IncidentExtraction(
-        wildlife_species=WildlifeSpecies.WILD_BOAR,
+        wildlife_species=WildlifeSpecies.OTHER,
         crop_damaged=CropCategory.COCONUT,
         damage_quantity=15.0,
         damage_unit=DamageUnit.TREES
     )
     flags = DomainReviewAuditor.audit(data, parcel_acres=2.0)
-    assert any(f.code == "REVIEW_DAMAGE_PATTERN_BOAR_PALM" for f in flags)
-    assert any(f.severity == "REVIEW" for f in flags)
+    assert any(f.code == "CLARIFICATION_WILDLIFE_SPECIES" for f in flags)
+    assert all(f.severity == "INFO" for f in flags)
 
 @pytest.mark.asyncio
-async def test_review_flag_density_benchmark():
-    # 3500 banana plants on 1.0 acre (Standard reference is ~1200)
+async def test_neutral_clarification_multi_plot():
+    # 3500 banana plants on large report -> raises neutral multi-plot clarification prompt, never invalidates
     data = IncidentExtraction(
         wildlife_species=WildlifeSpecies.ELEPHANT,
         crop_damaged=CropCategory.BANANA,
@@ -58,8 +58,10 @@ async def test_review_flag_density_benchmark():
         damage_unit=DamageUnit.TREES
     )
     flags = DomainReviewAuditor.audit(data, parcel_acres=1.0)
-    assert any(f.code == "REVIEW_DENSITY_BENCHMARK_BANANA" for f in flags)
-    assert any(f.severity == "REVIEW" for f in flags)
+    assert any(f.code == "CLARIFICATION_MULTI_PLOT_DECLARATION" for f in flags)
+    assert all(f.severity == "INFO" for f in flags)
+    # Verify no biological impossibility flags exist
+    assert not any("IMPOSSIBLE" in f.code for f in flags)
 
 @pytest.mark.asyncio
 async def test_real_vs_mock_separation_never_silent_fallback():

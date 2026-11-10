@@ -45,6 +45,7 @@ backend/.env
 backend/storage/
 backend/static/uploads/
 backend/static/dossiers/
+backend/static/audio/
 
 # OS Files
 .DS_Store

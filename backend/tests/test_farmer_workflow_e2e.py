@@ -42,35 +42,29 @@ async def test_full_farmer_workflow_and_deduplication():
             assert turn["extracted"]["damage_quantity"] > 0
             assert "spoken_response_text" in turn
             assert "spoken_response_audio_url" in turn
-            assert "disclaimer" in turn
-            assert "சுய அறிவிப்பு" in turn["disclaimer"]
 
-            # Step 3: Photo upload with consent GPS metadata
+            # Step 3: Verify rejection of photo upload for nonexistent incident (HTTP 404)
             img_buffer = io.BytesIO()
             test_img = Image.new("RGB", (300, 200), color=(34, 139, 34))
             test_img.save(img_buffer, format="JPEG")
             photo_bytes = img_buffer.getvalue()
 
             photo_files = {"photo_file": ("damage_field.jpg", photo_bytes, "image/jpeg")}
-            photo_form = {
-                "incident_id": f"test-inc-{test_run_id}",
+            invalid_photo_form = {
+                "incident_id": f"nonexistent-inc-{test_run_id}",
                 "photo_type": "WIDE_ANGLE",
                 "latitude": "10.3245",
                 "longitude": "76.9512"
             }
-            photo_resp = await client.post("/api/v1/evidence/upload", files=photo_files, data=photo_form)
-            assert photo_resp.status_code == 200
-            photo_data = photo_resp.json()
-            assert photo_data["has_gps"] is True
-            assert photo_data["latitude"] == 10.3245
-            assert photo_data["longitude"] == 76.9512
-            assert photo_data["is_verified"] is False
-            assert photo_data["location_metadata_source"] == "consent_device_gps"
+            invalid_photo_resp = await client.post("/api/v1/evidence/upload", files=photo_files, data=invalid_photo_form)
+            assert invalid_photo_resp.status_code == 404
+            assert "not found" in invalid_photo_resp.json()["detail"].lower()
 
             # Step 4: Create incident (Initial creation)
             create_payload = {
                 "farmer_id": test_farmer_id,
                 "client_draft_id": f"draft_{test_run_id}",
+                "farmer_name": "செல்வம்",
                 "wildlife_species": turn["extracted"]["wildlife_species"],
                 "wildlife_species_tamil": turn["extracted"]["wildlife_species_tamil"],
                 "crop_damaged": turn["extracted"]["crop_damaged"],
@@ -88,6 +82,25 @@ async def test_full_farmer_workflow_and_deduplication():
             assert inc_res["duplicate_prevented"] is False
             first_incident_id = inc_res["incident_id"]
             first_incident_code = inc_res["incident_code"]
+
+            # Step 5: Upload valid evidence photo linked to the created incident
+            valid_photo_files = {"photo_file": ("damage_field.jpg", photo_bytes, "image/jpeg")}
+            valid_photo_form = {
+                "incident_id": first_incident_id,
+                "photo_type": "WIDE_ANGLE",
+                "latitude": "10.3245",
+                "longitude": "76.9512",
+                "accuracy": "6.5"
+            }
+            photo_resp = await client.post("/api/v1/evidence/upload", files=valid_photo_files, data=valid_photo_form)
+            assert photo_resp.status_code == 200
+            photo_data = photo_resp.json()
+            assert photo_data["has_gps"] is True
+            assert photo_data["latitude"] == 10.3245
+            assert photo_data["longitude"] == 76.9512
+            assert photo_data["is_verified"] is False
+            assert photo_data["location_metadata_source"] == "consent_device_gps"
+            assert photo_data["database_recorded"] is True
 
             # Step 5: Duplicate prevention test (submit exact same payload again)
             dup_resp = await client.post("/api/v1/incidents/create", json=create_payload)

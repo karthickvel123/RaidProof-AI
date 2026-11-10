@@ -10,6 +10,7 @@ class IncidentReport(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     farmer_id = Column(String(36), ForeignKey("farmers.id"), nullable=False, index=True)
     parcel_id = Column(String(36), ForeignKey("land_parcels.id"), nullable=True, index=True)
+    client_draft_id = Column(String(100), nullable=True, index=True)
     incident_code = Column(String(30), unique=True, nullable=False, index=True)
 
     wildlife_species = Column(String(50), nullable=False)  # ELEPHANT, WILD_BOAR, GAUR, etc.
