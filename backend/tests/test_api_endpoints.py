@@ -1,3 +1,5 @@
+from unittest.mock import patch
+import httpx
 import io
 import pytest
 from httpx import AsyncClient, ASGITransport
@@ -64,5 +66,66 @@ async def test_voice_diagnostics_endpoint():
         assert "status" in data
         assert "stt" in data
         assert "tts" in data
+
+@pytest.mark.asyncio
+async def test_voice_diagnostics_stt_ok_tts_fail_is_degraded():
+    orig_mock = settings.USE_MOCK_VOICE
+    orig_key = settings.GNANI_API_KEY
+    settings.USE_MOCK_VOICE = False
+    settings.GNANI_API_KEY = "test_key_stt_ok"
+
+    async def mock_post(self, url, *args, **kwargs):
+        url_str = str(url)
+        if "/stt/v3" in url_str:
+            return httpx.Response(200, json={"success": True, "transcript": "", "request_id": "test-req-123"})
+        else:
+            return httpx.Response(500, json={"error": "TTS offline"})
+
+    try:
+        with patch.object(httpx.AsyncClient, "post", mock_post):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                res = await client.get("/api/v1/voice/diagnostics")
+                assert res.status_code == 200
+                data = res.json()
+                assert data["status"] == "degraded"
+                assert data["stt"]["status"] == "connected"
+                assert data["stt"]["valid_payload"] is True
+                assert data["tts"]["status"] == "failed"
+                assert data["tts"]["valid_payload"] is False
+    finally:
+        settings.USE_MOCK_VOICE = orig_mock
+        settings.GNANI_API_KEY = orig_key
+
+@pytest.mark.asyncio
+async def test_voice_diagnostics_tts_ok_stt_fail_is_degraded():
+    orig_mock = settings.USE_MOCK_VOICE
+    orig_key = settings.GNANI_API_KEY
+    settings.USE_MOCK_VOICE = False
+    settings.GNANI_API_KEY = "test_key_tts_ok"
+
+    async def mock_post(self, url, *args, **kwargs):
+        url_str = str(url)
+        if "/stt/v3" in url_str:
+            return httpx.Response(500, json={"error": "STT offline"})
+        else:
+            return httpx.Response(200, content=b"RIFF" + b"\x00" * 200, headers={"content-type": "audio/wav"})
+
+    try:
+        with patch.object(httpx.AsyncClient, "post", mock_post):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                res = await client.get("/api/v1/voice/diagnostics")
+                assert res.status_code == 200
+                data = res.json()
+                assert data["status"] == "degraded"
+                assert data["stt"]["status"] == "failed"
+                assert data["stt"]["valid_payload"] is False
+                assert data["tts"]["status"] == "connected"
+                assert data["tts"]["valid_payload"] is True
+    finally:
+        settings.USE_MOCK_VOICE = orig_mock
+        settings.GNANI_API_KEY = orig_key
+
 
 

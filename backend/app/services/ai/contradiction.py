@@ -17,7 +17,9 @@ class DomainReviewAuditor:
     - This assistant does NOT verify wildlife identity or authenticate photographs.
     - It does NOT enforce rigid agricultural density limits or biological impossibility rules.
     - It NEVER implies that a farmer's crop-damage statement is invalid or disqualified.
-    - All prompts are strictly neutral, supportive, and optional.
+    - No crop quantity threshold triggers an automatic review flag.
+    - Clarification is provided ONLY when the farmer explicitly references multiple plots
+      or key declaration details are ambiguous.
     """
 
     @classmethod
@@ -46,7 +48,7 @@ class DomainReviewAuditor:
                 )
             )
 
-        # 2. Neutral Clarification: Zero or Unspecified Damage Quantity
+        # 2. Neutral Clarification: Zero or Missing Damage Quantity
         if extracted.damage_quantity is None or extracted.damage_quantity <= 0:
             flags.append(
                 ReviewFlag(
@@ -63,7 +65,7 @@ class DomainReviewAuditor:
                 )
             )
 
-        # 3. Neutral Clarification: Multiple or Mixed Crop Damage
+        # 3. Neutral Clarification: Multiple or Unlisted Crop Damage
         if extracted.crop_damaged == CropCategory.OTHER:
             flags.append(
                 ReviewFlag(
@@ -80,24 +82,34 @@ class DomainReviewAuditor:
                 )
             )
 
-        # 4. Neutral Clarification: Multi-plot or Contiguous Land Clarification
-        if parcel_acres is not None and parcel_acres > 0 and extracted.damage_quantity > 0:
-            # Only as an informational reminder if large numbers are mentioned, without asserting impossibility
-            if extracted.damage_quantity > 2000 and extracted.damage_unit in [DamageUnit.TREES, DamageUnit.PLANTS]:
-                flags.append(
-                    ReviewFlag(
-                        code="CLARIFICATION_MULTI_PLOT_DECLARATION",
-                        severity="INFO",
-                        message_en=(
-                            f"Informational note: For large counts ({int(extracted.damage_quantity)} {extracted.damage_unit.value}), "
-                            f"you may clarify if multiple survey plots or neighboring holdings were affected."
-                        ),
-                        prompt_ta=(
-                            f"குறிப்பிடப்பட்ட {int(extracted.damage_quantity)} மரங்கள்/செடிகள் சேதம் "
-                            f"ஒன்றிற்கும் மேற்பட்ட நில சர்வே எண்களைக் கொண்டதா என்பதை தேவைப்பட்டால் தெளிவுபடுத்தலாம்."
-                        )
+        # 4. Neutral Clarification: Farmer explicitly mentions multiple plots or ambiguous land holdings
+        # (Zero hardcoded damage_quantity thresholds; strictly triggered by farmer declaration)
+        narrative = " ".join([
+            extracted.attack_pattern or "",
+            extracted.crop_damaged_tamil or "",
+            extracted.incident_time_approx or ""
+        ]).lower()
+
+        multi_plot_keywords = [
+            "பல நில", "இரு நில", "இரண்டு நில", "வெவ்வேறு சர்வே", "அடுத்த நில",
+            "அண்டை நில", "கூட்டு நில", "multiple plots", "different survey", "adjacent plot"
+        ]
+
+        if any(kw in narrative for kw in multi_plot_keywords):
+            flags.append(
+                ReviewFlag(
+                    code="CLARIFICATION_MULTI_PLOT_DECLARATION",
+                    severity="INFO",
+                    message_en=(
+                        "Informational note: Your statement referenced multiple plots or land holdings. "
+                        "You may optionally list each survey or patta number in your self-declaration."
+                    ),
+                    prompt_ta=(
+                        "ஒன்றிற்கும் மேற்பட்ட நிலங்களில் சேதம் ஏற்பட்டுள்ளதாகக் குறிப்பிடப்பட்டுள்ளதால், "
+                        "அனைத்து சர்வே எண்களையும் விருப்பத்தின் பேரில் சுய அறிவிப்பில் சேர்க்கலாம்."
                     )
                 )
+            )
 
         return flags
 

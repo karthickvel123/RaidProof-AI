@@ -161,8 +161,8 @@ async def voice_diagnostics():
                 stt_status["status"] = "connected"
                 stt_status["valid_payload"] = True
 
-        stt_ok = tts_status["status"] == "connected"
-        tts_ok = stt_status["status"] == "connected"
+        stt_ok = stt_status["status"] == "connected"
+        tts_ok = tts_status["status"] == "connected"
 
         overall_status = "connected" if (stt_ok and tts_ok) else ("degraded" if (stt_ok or tts_ok) else "disconnected")
         latency_ms = round((time.time() - start_time) * 1000, 2)

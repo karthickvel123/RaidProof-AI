@@ -49,18 +49,31 @@ async def test_neutral_clarification_unspecified_wildlife():
     assert all(f.severity == "INFO" for f in flags)
 
 @pytest.mark.asyncio
-async def test_neutral_clarification_multi_plot():
-    # 3500 banana plants on large report -> raises neutral multi-plot clarification prompt, never invalidates
+async def test_no_fixed_crop_quantity_threshold_triggers_review():
+    # Verify that no fixed crop quantity threshold (2000, 3500, 10000 trees) triggers an automatic review
+    for qty in [500.0, 2000.0, 2500.0, 5000.0, 10000.0]:
+        data = IncidentExtraction(
+            wildlife_species=WildlifeSpecies.ELEPHANT,
+            crop_damaged=CropCategory.BANANA,
+            damage_quantity=qty,
+            damage_unit=DamageUnit.TREES
+        )
+        flags = DomainReviewAuditor.audit(data, parcel_acres=1.0)
+        assert len(flags) == 0, f"Expected no automatic review flags for quantity {qty}, but got: {flags}"
+
+@pytest.mark.asyncio
+async def test_explicit_multi_plot_narrative_clarification():
+    # Only triggers clarification when the farmer explicitly references multiple plots
     data = IncidentExtraction(
         wildlife_species=WildlifeSpecies.ELEPHANT,
         crop_damaged=CropCategory.BANANA,
-        damage_quantity=3500.0,
-        damage_unit=DamageUnit.TREES
+        damage_quantity=150.0,
+        damage_unit=DamageUnit.TREES,
+        attack_pattern="இரண்டு வெவ்வேறு சர்வே நிலங்களில் யானை சேதம் செய்தது"
     )
-    flags = DomainReviewAuditor.audit(data, parcel_acres=1.0)
+    flags = DomainReviewAuditor.audit(data, parcel_acres=2.0)
     assert any(f.code == "CLARIFICATION_MULTI_PLOT_DECLARATION" for f in flags)
     assert all(f.severity == "INFO" for f in flags)
-    # Verify no biological impossibility flags exist
     assert not any("IMPOSSIBLE" in f.code for f in flags)
 
 @pytest.mark.asyncio
