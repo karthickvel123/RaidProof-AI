@@ -30,7 +30,12 @@ import {
   Clock,
   Sparkles,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
+  PhoneCall,
+  IndianRupee,
+  Printer,
+  Coins,
+  ChevronRight
 } from 'lucide-react';
 
 import elephantImg from './assets/elephant.jpg';
@@ -46,7 +51,7 @@ import { LocationMapPicker } from './components/LocationMapPicker';
 import { offlineDb } from './services/db/offlineDb';
 
 type Language = 'ta' | 'en';
-type ActiveTab = 'dashboard' | 'new_report' | 'my_reports' | 'profile' | 'settings' | 'help' | 'landing';
+type ActiveTab = 'dashboard' | 'new_report' | 'my_reports' | 'compensation' | 'contacts' | 'profile' | 'settings' | 'help' | 'landing';
 type WizardStep = 1 | 2 | 3 | 4; // 1: Voice, 2: Evidence, 3: Review, 4: Dossier
 
 interface FarmerProfile {
@@ -180,6 +185,10 @@ export function App() {
     }
   ]);
   const [reportsFilter, setReportsFilter] = useState<'ALL' | 'UNDER_REVIEW' | 'COMPLETED'>('ALL');
+
+  // Compensation Norms & Calculator State
+  const [calcCrop, setCalcCrop] = useState<'banana' | 'paddy' | 'maize' | 'coconut' | 'sugarcane'>('banana');
+  const [calcQty, setCalcQty] = useState<number>(15);
 
   useEffect(() => {
     fetch('/api/v1/health')
@@ -404,16 +413,28 @@ export function App() {
         const code = result.incident_code || "RP-2026-0003";
         setCreatedIncidentCode(code);
 
-        // Upload first photo if present
-        if (evidencePhotos.length > 0 && evidencePhotos[0].blob) {
-          const form = new FormData();
-          form.append('photo_file', evidencePhotos[0].blob, 'photo.jpg');
-          form.append('incident_id', incidentId);
-          form.append('photo_type', 'WIDE_ANGLE');
-          form.append('latitude', String(mapCoords.latitude));
-          form.append('longitude', String(mapCoords.longitude));
-          form.append('accuracy', String(mapCoords.accuracy));
-          await fetch('/api/v1/evidence/upload', { method: 'POST', body: form }).catch(console.warn);
+        // Upload evidence photos (converting any URL to Blob if blob is not set)
+        for (let idx = 0; idx < Math.min(evidencePhotos.length, 2); idx++) {
+          const p = evidencePhotos[idx];
+          let blob = p.blob;
+          if (!blob && p.url) {
+            try {
+              const resBlob = await fetch(p.url);
+              blob = await resBlob.blob();
+            } catch (e) {
+              console.warn('Could not fetch photo blob', e);
+            }
+          }
+          if (blob) {
+            const form = new FormData();
+            form.append('photo_file', blob, `evidence_${idx + 1}.jpg`);
+            form.append('incident_id', incidentId);
+            form.append('photo_type', idx === 0 ? 'WIDE_ANGLE' : 'CLOSE_UP_SPOOR');
+            form.append('latitude', String(mapCoords.latitude));
+            form.append('longitude', String(mapCoords.longitude));
+            form.append('accuracy', String(mapCoords.accuracy));
+            await fetch('/api/v1/evidence/upload', { method: 'POST', body: form }).catch(console.warn);
+          }
         }
 
         setDossierPdfUrl(`/api/v1/dossier/${incidentId}/pdf`);
@@ -593,6 +614,32 @@ export function App() {
 
           <button
             type="button"
+            onClick={() => setActiveTab('compensation')}
+            className={`w-full px-3.5 py-2.5 rounded-xl flex items-center gap-2.5 text-xs font-bold transition text-left ${
+              activeTab === 'compensation'
+                ? 'bg-emerald-800 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <IndianRupee className="w-4 h-4" />
+            <span>{isTa ? 'நிவாரண அட்டவணை' : 'Relief Norms'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('contacts')}
+            className={`w-full px-3.5 py-2.5 rounded-xl flex items-center gap-2.5 text-xs font-bold transition text-left ${
+              activeTab === 'contacts'
+                ? 'bg-emerald-800 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            <PhoneCall className="w-4 h-4" />
+            <span>{isTa ? 'அவசர தொடர்புகள்' : 'Forest Helplines'}</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('profile')}
             className={`w-full px-3.5 py-2.5 rounded-xl flex items-center gap-2.5 text-xs font-bold transition text-left ${
               activeTab === 'profile'
@@ -725,6 +772,28 @@ export function App() {
           {/* ============================================================== */}
           {activeTab === 'dashboard' && (
             <div className="space-y-4">
+              {/* Live Wildlife Movement Alert Banner */}
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-start gap-3.5 text-amber-950 shadow-xs">
+                <div className="w-9 h-9 rounded-xl bg-amber-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-600 text-white uppercase tracking-wider animate-pulse">
+                      {isTa ? 'நேரடி வன எச்சரிக்கை' : 'Live Wildlife Alert'}
+                    </span>
+                    <span className="text-xs font-bold text-amber-950">
+                      {isTa ? 'வால்பாறை - ஆனைமலை புலிகள் காப்பக எல்லை (ATR)' : 'Valparai - Anamalai Tiger Reserve Buffer'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-amber-900/90 mt-1.5 leading-relaxed">
+                    {isTa
+                      ? 'வனத்துறை ரோந்துப்படை தகவல்: 4 காட்டு யானைகள் கூட்டம் வால்பாறை தேயிலை மற்றும் சோளப் பயிர் எல்லைப் பகுதியில் நடமாடுகிறது. விவசாயிகள் மாலை 6 மணிக்குப் பின் தனியாக களத்திற்கு செல்ல வேண்டாம். வனத்துறை அவசர உதவி எண்: 1926 அல்லது 04259 235385.'
+                      : 'Forest Patrol Advisory: A herd of 4 wild elephants is active near the Valparai tea and maize crop boundary. Cultivators are advised to exercise caution after dusk. Helpline: 1926 or 04259 235385.'}
+                  </p>
+                </div>
+              </div>
+
               {/* Welcome Header */}
               <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex items-center justify-between">
                 <div>
@@ -767,6 +836,49 @@ export function App() {
                     <span className="text-xl font-extrabold text-blue-950 block leading-tight">2</span>
                     <span className="text-[11px] font-semibold text-blue-800">{isTa ? 'முடிவுற்றவை' : 'Completed'}</span>
                   </div>
+                </div>
+              </div>
+
+              {/* 2 Quick Access Feature Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div
+                  onClick={() => setActiveTab('compensation')}
+                  className="bg-white rounded-2xl p-4 border border-slate-200/80 hover:border-emerald-300 hover:shadow-sm cursor-pointer transition flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                      <Coins className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-xs text-slate-900">
+                        {isTa ? 'அரசு நிவாரண விகிதங்கள் (G.O. 42)' : 'TN Relief Norms & Calculator'}
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        {isTa ? 'பயிர் வாரியாக உத்தேச இழப்பீட்டைக் கணக்கிட' : 'Estimate government compensation per crop'}
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400" />
+                </div>
+
+                <div
+                  onClick={() => setActiveTab('contacts')}
+                  className="bg-white rounded-2xl p-4 border border-slate-200/80 hover:border-emerald-300 hover:shadow-sm cursor-pointer transition flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-800 flex items-center justify-center shrink-0">
+                      <PhoneCall className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-xs text-slate-900">
+                        {isTa ? 'வனத்துறை அவசர எண்கள் (1926)' : 'Forest Emergency Helplines (1926)'}
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        {isTa ? 'பறக்கும் படை மற்றும் வனச்சரக அலுவலகங்கள்' : 'Range offices & rapid response teams'}
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400" />
                 </div>
               </div>
 
@@ -1444,6 +1556,23 @@ export function App() {
                         <button
                           type="button"
                           onClick={() => {
+                            const iframe = document.querySelector('iframe[title="Dossier PDF"]') as HTMLIFrameElement;
+                            if (iframe && iframe.contentWindow) {
+                              iframe.contentWindow.focus();
+                              iframe.contentWindow.print();
+                            } else {
+                              window.open(dossierPdfUrl, '_blank');
+                            }
+                          }}
+                          className="w-full py-2.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition"
+                        >
+                          <Printer className="w-4 h-4 text-slate-700" />
+                          <span>{isTa ? 'அச்சிடு (Print Dossier)' : 'Print Dossier'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
                             const text = encodeURIComponent(
                               `வணக்கம். பயிர்ச்சேத சான்றாவணம் (Dossier ID: ${createdIncidentCode}) தயாராகியுள்ளது: http://10.230.118.81:5173`
                             );
@@ -1772,6 +1901,451 @@ export function App() {
                 <div className="p-3 bg-slate-50 rounded-xl border">
                   <h4 className="font-bold text-slate-900 mb-1">{isTa ? '3. சான்றாவணம் (Dossier):' : '3. Evidence Dossier:'}</h4>
                   <p>{isTa ? 'அனைத்து விவரங்களையும் சரிபார்த்து உடனே அதிகாரப்பூர்வ PDF சான்றாவணத்தைப் பதிவிறக்கம் செய்து வனத்துறைக்கு சமர்ப்பிக்கலாம்.' : 'Review and generate the structured PDF dossier ready for official Forest Department inspection.'}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ============================================================== */}
+          {/* SCREEN: COMPENSATION NORMS & CALCULATOR (G.O. Ms. No. 42) */}
+          {/* ============================================================== */}
+          {activeTab === 'compensation' && (
+            <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-2">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <IndianRupee className="w-5 h-5 text-emerald-700" />
+                    <span>
+                      {isTa
+                        ? 'வனவிலங்கு பயிர்ச்சேத நிவாரண அட்டவணை & கணக்கீட்டாளர்'
+                        : 'Wildlife Crop Damage Relief Norms & Calculator'}
+                    </span>
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {isTa
+                      ? 'தமிழ்நாடு வனத்துறை அரசாணை (நிலை) எண்: 42 வழிகாட்டு நெறிமுறைகள்'
+                      : 'Tamil Nadu Forest Department G.O. Ms. No. 42 Official Schedule & Guidelines'}
+                  </p>
+                </div>
+                <span className="px-3 py-1 bg-emerald-50 text-emerald-800 text-[11px] font-bold rounded-lg border border-emerald-200 self-start sm:self-auto">
+                  G.O. Ms. No. 42 (E&F)
+                </span>
+              </div>
+
+              {/* Interactive Relief Calculator */}
+              <div className="bg-gradient-to-br from-emerald-50 to-teal-50/50 rounded-2xl p-5 border border-emerald-200/80 space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-700 text-white flex items-center justify-center font-bold">
+                    <Coins className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm text-emerald-950">
+                      {isTa ? 'உத்தேச நிவாரணக் கணக்கீட்டாளர்' : 'Estimated Relief Calculator'}
+                    </h3>
+                    <p className="text-[11px] text-emerald-800">
+                      {isTa
+                        ? 'அரசு வழிகாட்டுதல்படி உத்தேச இழப்பீட்டுத் தொகையைக் கணக்கிடவும்.'
+                        : 'Calculate indicative government compensation norms.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {isTa ? 'பயிர் வகை (Crop Type):' : 'Crop Type:'}
+                    </label>
+                    <select
+                      value={calcCrop}
+                      onChange={(e) => setCalcCrop(e.target.value as any)}
+                      className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="banana">{isTa ? 'வாழை (Banana) - ₹300 / மரம்' : 'Banana - ₹300 / tree'}</option>
+                      <option value="paddy">{isTa ? 'நெல் (Paddy) - ₹10,000 / ஏக்கர்' : 'Paddy - ₹10,000 / acre'}</option>
+                      <option value="maize">{isTa ? 'மக்காச்சோளம் (Maize) - ₹8,000 / ஏக்கர்' : 'Maize - ₹8,000 / acre'}</option>
+                      <option value="coconut">{isTa ? 'தென்னை (Coconut) - ₹1,500 / மரம்' : 'Coconut - ₹1,500 / tree'}</option>
+                      <option value="sugarcane">{isTa ? 'கரும்பு (Sugarcane) - ₹25,000 / ஏக்கர்' : 'Sugarcane - ₹25,000 / acre'}</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {calcCrop === 'banana' || calcCrop === 'coconut'
+                        ? (isTa ? 'சேதமடைந்த மரங்கள் எண்ணிக்கை:' : 'Damaged Trees Count:')
+                        : (isTa ? 'சேதமடைந்த பரப்பளவு (ஏக்கர்):' : 'Damaged Area (Acres):')}
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      step={calcCrop === 'banana' || calcCrop === 'coconut' ? '1' : '0.5'}
+                      value={calcQty}
+                      onChange={(e) => setCalcQty(Math.max(1, Number(e.target.value) || 1))}
+                      className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div className="bg-white rounded-xl p-3 border border-emerald-200 flex flex-col justify-center">
+                    <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">
+                      {isTa ? 'உத்தேச நிவாரணத் தொகை' : 'Estimated Guideline Relief'}
+                    </span>
+                    <span className="text-xl font-extrabold text-emerald-950 font-mono">
+                      ₹{' '}
+                      {(
+                        calcCrop === 'banana'
+                          ? calcQty * 300
+                          : calcCrop === 'coconut'
+                          ? calcQty * 1500
+                          : calcCrop === 'paddy'
+                          ? calcQty * 10000
+                          : calcCrop === 'maize'
+                          ? calcQty * 8000
+                          : calcQty * 25000
+                      ).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-emerald-200/60">
+                  <span className="text-[11px] text-emerald-900/80">
+                    * {isTa ? 'நிர்ணயிக்கப்பட்ட உச்சவரம்புகளுக்கு உட்பட்டது' : 'Subject to departmental caps and rules'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExtractedData({
+                        wildlife_species: "ELEPHANT",
+                        wildlife_species_tamil: "காட்டு யானை",
+                        crop_damaged: calcCrop.toUpperCase(),
+                        crop_damaged_tamil:
+                          calcCrop === 'banana'
+                            ? 'வாழை'
+                            : calcCrop === 'paddy'
+                            ? 'நெல்'
+                            : calcCrop === 'maize'
+                            ? 'சோளம்'
+                            : calcCrop === 'coconut'
+                            ? 'தென்னை'
+                            : 'கரும்பு',
+                        damage_quantity: calcQty,
+                        damage_unit: calcCrop === 'banana' || calcCrop === 'coconut' ? 'TREES' : 'ACRES',
+                        damage_unit_tamil: calcCrop === 'banana' || calcCrop === 'coconut' ? 'மரங்கள்' : 'ஏக்கர்',
+                        incident_time: "நேற்று இரவு (Yesterday Night)",
+                        damage_type: "பயிர்ச்சேதம் (Crop damage)"
+                      });
+                      setActiveTab('new_report');
+                      setWizardStep(2);
+                    }}
+                    className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition shadow-xs"
+                  >
+                    <span>{isTa ? 'இந்த பயிரை அறிக்கையில் சேர்க்க' : 'Use in Incident Report'}</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Official Relief Schedule Table */}
+              <div className="space-y-3">
+                <h3 className="font-bold text-sm text-slate-900">
+                  {isTa ? 'அரசாணை வழிகாட்டு நிவாரண அட்டவணை' : 'Official Government Relief Schedule'}
+                </h3>
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold">
+                        <th className="py-2.5 px-3">#</th>
+                        <th className="py-2.5 px-3">{isTa ? 'பயிர் / சேத வகை' : 'Crop / Damage Type'}</th>
+                        <th className="py-2.5 px-3">{isTa ? 'நிவாரண விகிதம் (Norms)' : 'Prescribed Relief Rate'}</th>
+                        <th className="py-2.5 px-3">{isTa ? 'உச்ச வரம்பு (Max Cap)' : 'Maximum Cap'}</th>
+                        <th className="py-2.5 px-3">{isTa ? 'தேவையான சான்றுகள்' : 'Required Documents'}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      <tr className="hover:bg-slate-50/60">
+                        <td className="py-2.5 px-3 font-mono text-slate-400">1</td>
+                        <td className="py-2.5 px-3 font-bold text-slate-900">{isTa ? 'வாழை (Banana)' : 'Banana'}</td>
+                        <td className="py-2.5 px-3 text-slate-700">{isTa ? '₹300 / குலை தள்ளிய மரம்' : '₹300 / bearing tree'}</td>
+                        <td className="py-2.5 px-3 text-slate-700">{isTa ? '₹35,000 / ஏக்கர்' : '₹35,000 / acre'}</td>
+                        <td className="py-2.5 px-3 text-slate-500">{isTa ? 'பட்டா, சேத புகைப்படங்கள்' : 'Patta, Damage Photos'}</td>
+                      </tr>
+                      <tr className="hover:bg-slate-50/60">
+                        <td className="py-2.5 px-3 font-mono text-slate-400">2</td>
+                        <td className="py-2.5 px-3 font-bold text-slate-900">{isTa ? 'தென்னை (Coconut)' : 'Coconut'}</td>
+                        <td className="py-2.5 px-3 text-slate-700">{isTa ? '₹1,500 - ₹3,000 / மரம்' : '₹1,500 - ₹3,000 / palm'}</td>
+                        <td className="py-2.5 px-3 text-slate-700">{isTa ? '₹50,000 / ஏக்கர்' : '₹50,000 / acre'}</td>
+                        <td className="py-2.5 px-3 text-slate-500">{isTa ? 'பட்டா, மர வயது விவரம்' : 'Patta, Palm Age Details'}</td>
+                      </tr>
+                      <tr className="hover:bg-slate-50/60">
+                        <td className="py-2.5 px-3 font-mono text-slate-400">3</td>
+                        <td className="py-2.5 px-3 font-bold text-slate-900">{isTa ? 'நெல் (Paddy)' : 'Paddy'}</td>
+                        <td className="py-2.5 px-3 text-slate-700">{isTa ? '₹10,000 / ஏக்கர் (₹25,000/ஹெக்)' : '₹10,000 / acre'}</td>
+                        <td className="py-2.5 px-3 text-slate-700">{isTa ? '₹25,000 / ஹெக்டேர்' : '₹25,000 / hectare'}</td>
+                        <td className="py-2.5 px-3 text-slate-500">{isTa ? 'அடங்கல், நில உரிமை ஆவணம்' : 'Adangal, Land Record'}</td>
+                      </tr>
+                      <tr className="hover:bg-slate-50/60">
+                        <td className="py-2.5 px-3 font-mono text-slate-400">4</td>
+                        <td className="py-2.5 px-3 font-bold text-slate-900">{isTa ? 'சோளம் / மக்காச்சோளம் (Maize)' : 'Maize / Cholam'}</td>
+                        <td className="py-2.5 px-3 text-slate-700">{isTa ? '₹8,000 / ஏக்கர் (₹20,000/ஹெக்)' : '₹8,000 / acre'}</td>
+                        <td className="py-2.5 px-3 text-slate-700">{isTa ? '₹20,000 / ஹெக்டேர்' : '₹20,000 / hectare'}</td>
+                        <td className="py-2.5 px-3 text-slate-500">{isTa ? 'பயிர் அடங்கல், கள படம்' : 'Adangal, Field Photos'}</td>
+                      </tr>
+                      <tr className="hover:bg-slate-50/60">
+                        <td className="py-2.5 px-3 font-mono text-slate-400">5</td>
+                        <td className="py-2.5 px-3 font-bold text-slate-900">{isTa ? 'கரும்பு (Sugarcane)' : 'Sugarcane'}</td>
+                        <td className="py-2.5 px-3 text-slate-700">{isTa ? '₹25,000 / ஏக்கர்' : '₹25,000 / acre'}</td>
+                        <td className="py-2.5 px-3 text-slate-700">{isTa ? '₹25,000 / ஏக்கர்' : '₹25,000 / acre'}</td>
+                        <td className="py-2.5 px-3 text-slate-500">{isTa ? 'ஆலை பதிவு / பட்டா' : 'Mill Registration / Patta'}</td>
+                      </tr>
+                      <tr className="hover:bg-slate-50/60">
+                        <td className="py-2.5 px-3 font-mono text-slate-400">6</td>
+                        <td className="py-2.5 px-3 font-bold text-slate-900">{isTa ? 'கால்நடை இழப்பு (பசு / எருமை)' : 'Cattle / Buffalo Loss'}</td>
+                        <td className="py-2.5 px-3 text-slate-700">{isTa ? '₹30,000 / கால்நடை' : '₹30,000 / cattle'}</td>
+                        <td className="py-2.5 px-3 text-slate-700">{isTa ? '₹30,000 / ஒன்றுக்கு' : '₹30,000 each'}</td>
+                        <td className="py-2.5 px-3 text-slate-500">{isTa ? 'கால்நடை மருத்துவர் PM அறிக்கை' : 'Veterinary PM Report'}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* 4-Step Official Sanction Flow */}
+              <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200 space-y-3">
+                <h4 className="font-bold text-xs text-slate-900">
+                  {isTa ? 'அரசு நிவாரணம் பெறும் செயல்முறை வழிகாட்டி:' : 'Official Ex-Gratia Sanction Process:'}
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
+                  <div className="p-3 bg-white rounded-xl border border-slate-200">
+                    <span className="w-5 h-5 rounded-full bg-emerald-700 text-white flex items-center justify-center font-bold text-[10px] mb-1.5">1</span>
+                    <h5 className="font-bold text-slate-800">{isTa ? 'சான்றாவணம் பதிவு' : 'Report & Dossier'}</h5>
+                    <p className="text-[11px] text-slate-500 mt-1">{isTa ? 'சம்பவம் நடந்த 24 மணி நேரத்திற்குள் சான்றாவணம் தயார் செய்தல்.' : 'Generate dossier within 24 hours of incident.'}</p>
+                  </div>
+                  <div className="p-3 bg-white rounded-xl border border-slate-200">
+                    <span className="w-5 h-5 rounded-full bg-emerald-700 text-white flex items-center justify-center font-bold text-[10px] mb-1.5">2</span>
+                    <h5 className="font-bold text-slate-800">{isTa ? 'கூட்டு கள ஆய்வு' : 'Joint Inspection'}</h5>
+                    <p className="text-[11px] text-slate-500 mt-1">{isTa ? 'வனச்சரக அலுவலர் & கிராம நிர்வாக அலுவலர் (VAO) கள ஆய்வு.' : 'Forest Range Officer & VAO inspect damage site.'}</p>
+                  </div>
+                  <div className="p-3 bg-white rounded-xl border border-slate-200">
+                    <span className="w-5 h-5 rounded-full bg-emerald-700 text-white flex items-center justify-center font-bold text-[10px] mb-1.5">3</span>
+                    <h5 className="font-bold text-slate-800">{isTa ? 'மாவட்ட அலுவலர் ஒப்புதல்' : 'DFO Sanction'}</h5>
+                    <p className="text-[11px] text-slate-500 mt-1">{isTa ? 'மாவட்ட வன அலுவலர் இழப்பீட்டு தொகையை இறுதி செய்தல்.' : 'DFO reviews inspection and sanctions relief.'}</p>
+                  </div>
+                  <div className="p-3 bg-white rounded-xl border border-slate-200">
+                    <span className="w-5 h-5 rounded-full bg-emerald-700 text-white flex items-center justify-center font-bold text-[10px] mb-1.5">4</span>
+                    <h5 className="font-bold text-slate-800">{isTa ? 'வங்கி கணக்கில் வரவு' : 'DBT Bank Credit'}</h5>
+                    <p className="text-[11px] text-slate-500 mt-1">{isTa ? 'விவசாயியின் வங்கிக் கணக்கிற்கு நேரடியாக நிதி பரிமாற்றம்.' : 'Relief transferred directly to bank account.'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Regulatory Notice */}
+              <div className="p-3.5 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold block mb-0.5">
+                    {isTa ? 'சட்டப்பூர்வ அறிவிப்பு:' : 'Statutory Regulatory Notice:'}
+                  </span>
+                  <span>
+                    {isTa
+                      ? 'மேற்கண்ட கணக்கீடு அரசாணை வழிகாட்டுதல்களின்படியான உத்தேச மதிப்பீடு மட்டுமே. AI தளம் இழப்பீட்டை அனுமதிக்கும் அதிகாரம் கொண்டதல்ல. இழப்பீட்டுத் தொகை துறைசார்ந்த அதிகாரிகளின் நேரடி கள ஆய்விற்குப் பிறகே தீர்மானிக்கப்படும்.'
+                      : 'The values above are indicative estimates derived from Government Orders. AI never approves or disburses claims. Formal compensation is sanctioned strictly post official joint departmental inspection.'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ============================================================== */}
+          {/* SCREEN: FOREST EMERGENCY CONTACTS & RAPID RESPONSE TEAMS */}
+          {/* ============================================================== */}
+          {activeTab === 'contacts' && (
+            <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-2">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <PhoneCall className="w-5 h-5 text-rose-600" />
+                    <span>
+                      {isTa
+                        ? 'வனத்துறை அவசர தொடர்புகள் & பறக்கும் படை'
+                        : 'Forest Emergency Helplines & Rapid Response Teams'}
+                    </span>
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {isTa
+                      ? 'வனவிலங்கு நடமாட்டம், பயிர்ச்சேதம் மற்றும் அவசர உதவிக்கான தொடர்பு எண்கள்'
+                      : 'Emergency contact directory for wildlife incursions and depredation assistance'}
+                  </p>
+                </div>
+                <span className="px-3 py-1 bg-rose-50 text-rose-700 text-[11px] font-bold rounded-lg border border-rose-200 self-start sm:self-auto flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping"></span>
+                  24x7 Active
+                </span>
+              </div>
+
+              {/* 24x7 State Helpline Card */}
+              <div className="bg-gradient-to-r from-emerald-800 to-teal-800 rounded-2xl p-5 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+                <div className="space-y-1">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-white/20 uppercase tracking-wider">
+                    {isTa ? 'மாநில வனத்துறை 24x7 கட்டுப்பாட்டு அறை' : 'State Forest 24x7 Control Room'}
+                  </span>
+                  <h3 className="text-2xl font-black tracking-tight">1926</h3>
+                  <p className="text-xs text-emerald-100 max-w-md">
+                    {isTa
+                      ? 'தமிழ்நாடு முழுவதும் வனவிலங்கு மனித எதிர்கொள்ளல் மற்றும் அவசர உதவிக்கான கட்டணமில்லா தொலைபேசி எண்.'
+                      : 'Statewide toll-free helpline for human-wildlife encounters and rapid assistance.'}
+                  </p>
+                </div>
+                <a
+                  href="tel:1926"
+                  className="px-5 py-3 bg-white hover:bg-emerald-50 text-emerald-900 font-extrabold rounded-xl text-xs flex items-center justify-center gap-2 transition shadow-xs shrink-0"
+                >
+                  <PhoneCall className="w-4 h-4 text-emerald-800" />
+                  <span>{isTa ? 'உடனடியாக அழைக்க: 1926' : 'Call 1926 Toll-Free'}</span>
+                </a>
+              </div>
+
+              {/* District & Division Range Offices Directory */}
+              <div className="space-y-3">
+                <h3 className="font-bold text-sm text-slate-900">
+                  {isTa ? 'மண்டல வனச்சரக அலுவலகங்கள் & ரோந்துப் படைகள்' : 'Regional Range Offices & Patrol Units'}
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  {/* ATR Pollachi */}
+                  <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-emerald-300 transition space-y-2">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="font-bold text-xs text-slate-900">
+                          {isTa ? 'ஆனைமலை புலிகள் காப்பகம் (ATR) கட்டுப்பாட்டு அறை' : 'Anamalai Tiger Reserve Control Room'}
+                        </h4>
+                        <span className="text-[11px] text-slate-500">பொள்ளாச்சி (Pollachi)</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">24 Hours</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="font-mono font-bold text-xs text-slate-800">04259 235385 / 1800 425 4545</span>
+                      <a
+                        href="tel:04259235385"
+                        className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 transition"
+                      >
+                        <PhoneCall className="w-3 h-3" />
+                        <span>{isTa ? 'அழைக்க' : 'Call'}</span>
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Valparai Range */}
+                  <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-emerald-300 transition space-y-2">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="font-bold text-xs text-slate-900">
+                          {isTa ? 'வால்பாறை வனச்சரக அலுவலகம்' : 'Valparai Forest Range Office'}
+                        </h4>
+                        <span className="text-[11px] text-slate-500">வால்பாறை & எஸ்டேட் எல்லைகள்</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">Range Office</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="font-mono font-bold text-xs text-slate-800">04253 222234</span>
+                      <a
+                        href="tel:04253222234"
+                        className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 transition"
+                      >
+                        <PhoneCall className="w-3 h-3" />
+                        <span>{isTa ? 'அழைக்க' : 'Call'}</span>
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Manambolly Range */}
+                  <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-emerald-300 transition space-y-2">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="font-bold text-xs text-slate-900">
+                          {isTa ? 'மணம்பள்ளி வனச்சரக அலுவலகம்' : 'Manambolly Forest Range Office'}
+                        </h4>
+                        <span className="text-[11px] text-slate-500">சோலையார் அணை & ஆனைமலை</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">Range Office</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="font-mono font-bold text-xs text-slate-800">04253 222235</span>
+                      <a
+                        href="tel:04253222235"
+                        className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 transition"
+                      >
+                        <PhoneCall className="w-3 h-3" />
+                        <span>{isTa ? 'அழைக்க' : 'Call'}</span>
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Coimbatore Flying Squad */}
+                  <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-emerald-300 transition space-y-2">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="font-bold text-xs text-slate-900">
+                          {isTa ? 'கோயம்புத்தூர் யானை தடுப்பு பறக்கும் படை' : 'Coimbatore Elephant Flying Squad'}
+                        </h4>
+                        <span className="text-[11px] text-slate-500">மதுக்கரை, தொண்டாமுத்தூர், போளூவாம்பட்டி</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-900">Rapid Response</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="font-mono font-bold text-xs text-slate-800">0422 2434777</span>
+                      <a
+                        href="tel:04222434777"
+                        className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 transition"
+                      >
+                        <PhoneCall className="w-3 h-3" />
+                        <span>{isTa ? 'அழைக்க' : 'Call'}</span>
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Nilgiris Division */}
+                  <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-emerald-300 transition space-y-2">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="font-bold text-xs text-slate-900">
+                          {isTa ? 'நீலகிரி வனக்கோட்ட விரைவு அதிரடிப்படை' : 'Nilgiris Depredation Response Team'}
+                        </h4>
+                        <span className="text-[11px] text-slate-500">கூடலூர், உதகை & கோத்தகிரி</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">QRT Team</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="font-mono font-bold text-xs text-slate-800">0423 2444071</span>
+                      <a
+                        href="tel:04232444071"
+                        className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 transition"
+                      >
+                        <PhoneCall className="w-3 h-3" />
+                        <span>{isTa ? 'அழைக்க' : 'Call'}</span>
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Sathyamangalam (STR) */}
+                  <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-emerald-300 transition space-y-2">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="font-bold text-xs text-slate-900">
+                          {isTa ? 'சத்தியமங்கலம் புலிகள் காப்பகம் (STR)' : 'Sathyamangalam Tiger Reserve'}
+                        </h4>
+                        <span className="text-[11px] text-slate-500">ஈரோடு & பவானிசாகர் எல்லை</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">STR Control</span>
+                    </div>
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="font-mono font-bold text-xs text-slate-800">04295 220312</span>
+                      <a
+                        href="tel:04295220312"
+                        className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 transition"
+                      >
+                        <PhoneCall className="w-3 h-3" />
+                        <span>{isTa ? 'அழைக்க' : 'Call'}</span>
+                      </a>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

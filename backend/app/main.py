@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
     # Seed default demonstration farmer and land parcel if DB is fresh
     async with AsyncSessionLocal() as session:
         res = await session.execute(select(Farmer))
-        existing_farmer = res.scalar_one_or_none()
+        existing_farmer = res.scalars().first()
         if not existing_farmer:
             demo_farmer = Farmer(
                 id="demo-farmer-01",

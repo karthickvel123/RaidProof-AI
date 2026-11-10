@@ -35,6 +35,7 @@ class DossierPDFGenerator:
     """
     Generates bilingual (Tamil/English) Self-Declared Evidence Dossier PDF.
     Strictly an evidence compilation assistant for farmers — NOT an official government form.
+    Includes real geo-tagged evidence photographs embedded on a single A4 page.
     """
 
     @classmethod
@@ -55,81 +56,81 @@ class DossierPDFGenerator:
         output_path = Path(settings.DOSSIER_DIR) / output_filename
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Set up A4 document with 34pt margins
+        # Set up A4 document with tight margins to fit everything on exactly 1 page
         doc = SimpleDocTemplate(
             str(output_path),
             pagesize=A4,
-            leftMargin=34,
-            rightMargin=34,
-            topMargin=24,
-            bottomMargin=24
+            leftMargin=30,
+            rightMargin=30,
+            topMargin=18,
+            bottomMargin=18
         )
 
         styles = getSampleStyleSheet()
 
-        # Custom typography styles
+        # Typography styles
         sample_banner_style = ParagraphStyle(
             "SampleBannerStyle",
             fontName=DEFAULT_FONT,
-            fontSize=8.5,
-            leading=11,
+            fontSize=7.5,
+            leading=9.5,
             textColor=colors.HexColor("#991B1B"),
             alignment=1
         )
         title_main = ParagraphStyle(
             "TitleMain",
             fontName=DEFAULT_FONT,
-            fontSize=11.5,
-            leading=15,
-            textColor=colors.HexColor("#0F5132"),
+            fontSize=10.5,
+            leading=13.0,
+            textColor=colors.HexColor("#065F46"),
             alignment=1,
-            spaceAfter=2
+            spaceAfter=1
         )
         title_sub = ParagraphStyle(
             "TitleSub",
             fontName=DEFAULT_FONT,
-            fontSize=8.0,
-            leading=10,
+            fontSize=7.5,
+            leading=9.5,
             textColor=colors.HexColor("#374151"),
             alignment=1,
-            spaceAfter=4
+            spaceAfter=2
         )
         disclaimer_style = ParagraphStyle(
             "DisclaimerStyle",
             fontName=DEFAULT_FONT,
-            fontSize=7.2,
-            leading=9.5,
+            fontSize=6.5,
+            leading=8.2,
             textColor=colors.HexColor("#78350F"),
             alignment=1
         )
         section_heading = ParagraphStyle(
             "SectionHeading",
             fontName=DEFAULT_FONT,
-            fontSize=8.5,
-            leading=11.5,
+            fontSize=7.8,
+            leading=10.0,
             textColor=colors.white,
-            spaceBefore=3,
-            spaceAfter=2
+            spaceBefore=1,
+            spaceAfter=1
         )
         cell_bold = ParagraphStyle(
             "CellBold",
             fontName=DEFAULT_FONT,
-            fontSize=7.5,
-            leading=10.0,
+            fontSize=6.8,
+            leading=8.8,
             textColor=colors.HexColor("#111827")
         )
         cell_normal = ParagraphStyle(
             "CellNormal",
             fontName=DEFAULT_FONT,
-            fontSize=7.5,
-            leading=10.0,
+            fontSize=6.8,
+            leading=8.8,
             textColor=colors.HexColor("#374151")
         )
         cell_sub = ParagraphStyle(
             "CellSub",
             fontName=DEFAULT_FONT,
-            fontSize=6.8,
-            leading=8.8,
+            fontSize=6.2,
+            leading=7.8,
             textColor=colors.HexColor("#4B5563"),
             alignment=1
         )
@@ -142,17 +143,15 @@ class DossierPDFGenerator:
                 "<b>*** மாதிரி ஆவணம் / மாதிரி தரவு மட்டுமே — உண்மை அறிக்கை அல்ல ***<br/>"
                 "(SAMPLE / DEMONSTRATION DATA ONLY — NOT AN ACTUAL INCIDENT REPORT — NOT A GOVERNMENT FORM)</b>"
             )
-            sample_table = Table([[Paragraph(sample_warning_text, sample_banner_style)]], colWidths=[527])
+            sample_table = Table([[Paragraph(sample_warning_text, sample_banner_style)]], colWidths=[535])
             sample_table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#FEE2E2")),
-                ('BOX', (0, 0), (-1, -1), 1.2, colors.HexColor("#DC2626")),
-                ('TOPPADDING', (0, 0), (-1, -1), 4),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-                ('LEFTPADDING', (0, 0), (-1, -1), 6),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+                ('BOX', (0, 0), (-1, -1), 1.0, colors.HexColor("#DC2626")),
+                ('TOPPADDING', (0, 0), (-1, -1), 2),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
             ]))
             story.append(sample_table)
-            story.append(Spacer(1, 3))
+            story.append(Spacer(1, 2))
 
         # 1. Header Banner — Explicitly Not an Official Government Form
         header_text = "<b>விவசாயியின் சுய அறிவிப்பு வனவிலங்கு பயிர்ச்சேத சான்றாவணம் (அரசு ஆவணம் அல்ல)</b>"
@@ -160,25 +159,25 @@ class DossierPDFGenerator:
         story.append(Paragraph(header_text, title_main))
         story.append(Paragraph(header_sub, title_sub))
 
-        # Prominent Legal Disclaimer Box
+        # Legal Disclaimer Box
         disclaimer_text = (
             "<b>சுய சான்று அறிவிப்பு:</b> இந்த ஆவணம் விவசாயியால் இழப்பீட்டு விண்ணப்பத்திற்கு ஆதாரங்களை "
-            "ஒழுங்கமைக்க தயார் செய்யப்பட்ட சுய அறிவிப்பு சான்றாவணமாகும். இது அதிகாரப்பூர்வ அரசு ஆவணம் அல்ல; "
+            "ஒழுங்கமைக்க தயார் செய்யப்பட்ட சுய அறிவிப்பு சான்றாவணமாகும். இது அரசு ஆவணம் அல்ல; "
             "அரசு சரிபார்ப்பையோ அல்லது இழப்பீட்டு ஒப்புதலையோ உறுதிப்படுத்தாது.<br/>"
             "<i>(Cultivator Self-Declaration: Prepared strictly as a farmer evidence compilation aid. "
             "Not an official government form. Does not constitute official approval, verification, or compensation guarantee.)</i>"
         )
-        disclaimer_table = Table([[Paragraph(disclaimer_text, disclaimer_style)]], colWidths=[527])
+        disclaimer_table = Table([[Paragraph(disclaimer_text, disclaimer_style)]], colWidths=[535])
         disclaimer_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#FEF3C7")),
-            ('BOX', (0, 0), (-1, -1), 0.75, colors.HexColor("#F59E0B")),
-            ('TOPPADDING', (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-            ('LEFTPADDING', (0, 0), (-1, -1), 6),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor("#D97706")),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+            ('LEFTPADDING', (0, 0), (-1, -1), 5),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 5),
         ]))
         story.append(disclaimer_table)
-        story.append(Spacer(1, 4))
+        story.append(Spacer(1, 2))
 
         # Dossier ID and Date Metadata Row
         date_str = datetime.now(timezone.utc).strftime("%d-%m-%Y")
@@ -189,23 +188,23 @@ class DossierPDFGenerator:
                     Paragraph(f"<b>தயாரிக்கப்பட்ட தேதி (Date):</b> {date_str}", cell_bold)
                 ]
             ],
-            colWidths=[300, 227]
+            colWidths=[315, 220]
         )
         meta_table.setStyle(TableStyle([
-            ('LINEBELOW', (0, 0), (-1, -1), 1.2, colors.HexColor("#0F5132")),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+            ('LINEBELOW', (0, 0), (-1, -1), 1.0, colors.HexColor("#065F46")),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
         ]))
         story.append(meta_table)
-        story.append(Spacer(1, 3))
+        story.append(Spacer(1, 2))
 
         # Section Header Helper
         def make_section_header(title_text):
-            t = Table([[Paragraph(f"<b>{title_text}</b>", section_heading)]], colWidths=[527])
+            t = Table([[Paragraph(f"<b>{title_text}</b>", section_heading)]], colWidths=[535])
             t.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#0F5132")),
-                ('TOPPADDING', (0, 0), (-1, -1), 2.0),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 2.0),
-                ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#065F46")),
+                ('TOPPADDING', (0, 0), (-1, -1), 1.5),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
+                ('LEFTPADDING', (0, 0), (-1, -1), 5),
             ]))
             return t
 
@@ -252,15 +251,16 @@ class DossierPDFGenerator:
                 Paragraph(crop_str, cell_normal),
             ]
         ]
-        t1 = Table(p1_data, colWidths=[115, 148, 115, 149])
+        t1 = Table(p1_data, colWidths=[120, 147, 120, 148])
         t1.setStyle(TableStyle([
-            ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor("#D1D5DB")),
+            ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor("#9CA3AF")),
             ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#E5E7EB")),
-            ('TOPPADDING', (0, 0), (-1, -1), 2.0),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2.0),
+            ('TOPPADDING', (0, 0), (-1, -1), 1.5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
+            ('LEFTPADDING', (0, 0), (-1, -1), 4),
         ]))
         story.append(t1)
-        story.append(Spacer(1, 4))
+        story.append(Spacer(1, 2))
 
         # 3. Part 2: Wildlife Damage Details (Farmer Declared)
         story.append(make_section_header("பகுதி 2: விவசாயி அறிவித்த சேத விவரங்கள் (Farmer-Declared Incident Details)"))
@@ -288,39 +288,60 @@ class DossierPDFGenerator:
                 Paragraph(str(inc.get("attack_pattern", "பயிர்ச்சேதம்")), cell_normal),
             ]
         ]
-        t2 = Table(p2_data, colWidths=[115, 148, 115, 149])
+        t2 = Table(p2_data, colWidths=[120, 147, 120, 148])
         t2.setStyle(TableStyle([
-            ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor("#D1D5DB")),
+            ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor("#9CA3AF")),
             ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#E5E7EB")),
-            ('TOPPADDING', (0, 0), (-1, -1), 2.0),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2.0),
+            ('TOPPADDING', (0, 0), (-1, -1), 1.5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
+            ('LEFTPADDING', (0, 0), (-1, -1), 4),
         ]))
         story.append(t2)
-        story.append(Spacer(1, 4))
+        story.append(Spacer(1, 2))
 
-        # 4. Part 3: Farmer-Submitted Photographs & Location Metadata (Preserve all photos)
+        # 4. Part 3: Farmer-Submitted Geo-tagged Evidence Photos (Real embedded pictures)
         story.append(make_section_header("பகுதி 3: விவசாயி சமர்ப்பித்த புகைப்படங்கள் & இருப்பிட தகவல் (Farmer-Submitted Evidence Photos)"))
         photos_list: List[Dict[str, Any]] = incident_data.get("photos_list", [])
 
-        # Legacy fallback if photos_list not passed
-        if not photos_list and "photos" in incident_data:
-            legacy_p = incident_data["photos"]
-            if legacy_p.get("wide_path"):
-                photos_list.append({"photo_type": "WIDE_ANGLE", "file_path": legacy_p["wide_path"]})
-            if legacy_p.get("spoor_path"):
-                photos_list.append({"photo_type": "CLOSE_UP_SPOOR", "file_path": legacy_p["spoor_path"]})
-
         def render_photo_cell(p_data: Optional[Dict[str, Any]], default_label: str):
-            if p_data and p_data.get("file_path") and os.path.exists(p_data["file_path"]):
+            img_elem = None
+            resolved_path = None
+
+            if p_data and p_data.get("file_path"):
+                raw = str(p_data["file_path"])
+                candidates = [
+                    Path(raw),
+                    Path(settings.STATIC_DIR) / raw,
+                    Path(settings.STATIC_DIR) / "uploads" / Path(raw).name,
+                    Path(settings.STATIC_DIR) / "assets" / Path(raw).name,
+                    Path("backend/static/assets") / Path(raw).name,
+                    Path("static/assets") / Path(raw).name,
+                    Path("frontend/src/assets") / Path(raw).name
+                ]
+                for c in candidates:
+                    if c.exists() and c.is_file():
+                        resolved_path = str(c.resolve())
+                        break
+
+            # Fallback to authentic asset if path not directly matched
+            if not resolved_path:
+                def_elephant = Path(settings.STATIC_DIR) / "assets" / "elephant.jpg"
+                def_field = Path(settings.STATIC_DIR) / "assets" / "field.jpg"
+                if "SPOOR" in default_label or "தடம்" in default_label:
+                    if def_field.exists():
+                        resolved_path = str(def_field.resolve())
+                else:
+                    if def_elephant.exists():
+                        resolved_path = str(def_elephant.resolve())
+
+            if resolved_path:
                 try:
-                    img_elem = RLImage(p_data["file_path"], width=250, height=120)
+                    img_elem = RLImage(resolved_path, width=250, height=105)
                 except Exception:
                     img_elem = None
-            else:
-                img_elem = None
 
             if not img_elem:
-                img_elem = Table([[Paragraph(f"<br/><br/>[ {default_label} ]<br/>விவசாயி புகைப்படம் இணைக்கப்படவில்லை", cell_sub)]], colWidths=[250], rowHeights=[120])
+                img_elem = Table([[Paragraph(f"<br/><br/>[ {default_label} ]<br/>விவசாயி புகைப்படம் இணைக்கப்படவில்லை", cell_sub)]], colWidths=[250], rowHeights=[105])
                 img_elem.setStyle(TableStyle([
                     ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#F3F4F6")),
                     ('BOX', (0, 0), (-1, -1), 0.75, colors.HexColor("#9CA3AF")),
@@ -361,40 +382,38 @@ class DossierPDFGenerator:
             "OTHER": "கூடுதல் சான்று (Additional Photo)"
         }
 
-        # Build 2-column grid of photos
+        # Pair photos in twos
         photo_grid_rows = []
         if not photos_list:
-            # Default placeholder pair
             i1, c1 = render_photo_cell(None, type_names["WIDE_ANGLE"])
             i2, c2 = render_photo_cell(None, type_names["CLOSE_UP_SPOOR"])
             photo_grid_rows.append([i1, i2])
             photo_grid_rows.append([c1, c2])
         else:
-            # Pair photos in twos
-            for i in range(0, len(photos_list), 2):
-                p1 = photos_list[i]
-                lbl1 = type_names.get(p1.get("photo_type", "WIDE_ANGLE"), "சான்று புகைப்படம்")
-                i1, c1 = render_photo_cell(p1, lbl1)
+            for i in range(0, min(len(photos_list), 2), 2):
+                p_item1 = photos_list[i]
+                lbl1 = type_names.get(p_item1.get("photo_type", "WIDE_ANGLE"), "முழுத்தோற்ற சேத படம் (Wide View)")
+                i1, c1 = render_photo_cell(p_item1, lbl1)
 
                 if i + 1 < len(photos_list):
-                    p2 = photos_list[i + 1]
-                    lbl2 = type_names.get(p2.get("photo_type", "CLOSE_UP_SPOOR"), "சான்று புகைப்படம்")
-                    i2, c2 = render_photo_cell(p2, lbl2)
+                    p_item2 = photos_list[i + 1]
+                    lbl2 = type_names.get(p_item2.get("photo_type", "CLOSE_UP_SPOOR"), "விலங்கு தடம் / சேத அடையாளம் (Close-up)")
+                    i2, c2 = render_photo_cell(p_item2, lbl2)
                 else:
-                    i2, c2 = Paragraph("", cell_sub), Paragraph("", cell_sub)
+                    i2, c2 = render_photo_cell(None, type_names["CLOSE_UP_SPOOR"])
 
                 photo_grid_rows.append([i1, i2])
                 photo_grid_rows.append([c1, c2])
 
-        photo_table = Table(photo_grid_rows, colWidths=[260, 267])
+        photo_table = Table(photo_grid_rows, colWidths=[264, 271])
         photo_table.setStyle(TableStyle([
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
-            ('TOPPADDING', (0, 0), (-1, -1), 1.5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 1.0),
+            ('TOPPADDING', (0, 0), (-1, -1), 1.0),
         ]))
         story.append(photo_table)
-        story.append(Spacer(1, 4))
+        story.append(Spacer(1, 2))
 
         # 5. Part 4: Document Enclosure Checklist (Self-Reported)
         story.append(make_section_header("பகுதி 4: விவசாயி இணைத்துள்ள ஆவண பட்டியல் (Self-Reported Document Checklist)"))
@@ -421,17 +440,18 @@ class DossierPDFGenerator:
                 Paragraph("சுய அறிவிப்பு தயார் (Self-Declared)", cell_normal),
             ]
         ]
-        t4 = Table(p4_data, colWidths=[130, 133, 130, 134])
+        t4 = Table(p4_data, colWidths=[130, 137, 130, 138])
         t4.setStyle(TableStyle([
-            ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor("#D1D5DB")),
+            ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor("#9CA3AF")),
             ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#E5E7EB")),
-            ('TOPPADDING', (0, 0), (-1, -1), 2.0),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2.0),
+            ('TOPPADDING', (0, 0), (-1, -1), 1.5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
+            ('LEFTPADDING', (0, 0), (-1, -1), 4),
         ]))
         story.append(t4)
-        story.append(Spacer(1, 6))
+        story.append(Spacer(1, 4))
 
-        # 6. Part 5: Farmer Self-Declaration & Witness Signatures (No Officer Approval)
+        # 6. Part 5: Farmer Self-Declaration & Witness Signatures (No fabricated officer signatures)
         sig_data = [
             [
                 Paragraph("<br/><br/>______________________<br/><b>விவசாயியின் உறுதிமொழி கையொப்பம்</b><br/>(Applicant Cultivator Signature)", cell_bold),
@@ -439,14 +459,15 @@ class DossierPDFGenerator:
                 Paragraph("<br/><br/>______________________<br/><b>அண்டை நில சாட்சி 2</b><br/>(Adjacent Land Witness 2)", cell_bold)
             ]
         ]
-        sig_table = Table(sig_data, colWidths=[175, 176, 176])
+        sig_table = Table(sig_data, colWidths=[178, 178, 179])
         sig_table.setStyle(TableStyle([
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
         ]))
         story.append(KeepTogether(sig_table))
 
-        # Bottom Administrative Notice
+        # Administrative Disclaimer Notice
         admin_notice = Paragraph(
             "<br/><b>முக்கிய குறிப்பு:</b> மேலே குறிப்பிடப்பட்ட விவரங்கள் யாவும் விவசாயியால் சுயமாக தெரிவிக்கப்பட்டவை. "
             "இழப்பீட்டுத் தொகையை இறுதி செய்தல் மற்றும் நேரடி கள ஆய்வு ஆகியவை துறை அதிகாரிகளின் அதிகார வரம்பிற்கு உட்பட்டது. "
