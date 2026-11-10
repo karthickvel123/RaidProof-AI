@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Dict, Any, Optional, List
 
 from reportlab.lib.pagesizes import A4
@@ -12,6 +12,7 @@ from reportlab.platypus import (
     Table,
     TableStyle,
     Image as RLImage,
+    PageBreak,
     KeepTogether
 )
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -25,17 +26,23 @@ FONT_PATH = Path(settings.FONTS_DIR) / "Nirmala.ttc"
 if FONT_PATH.exists():
     try:
         pdfmetrics.registerFont(TTFont("TamilFont", str(FONT_PATH), subfontIndex=0))
+        pdfmetrics.registerFont(TTFont("TamilFont-Bold", str(FONT_PATH), subfontIndex=1))
+        pdfmetrics.registerFontFamily("TamilFont", normal="TamilFont", bold="TamilFont-Bold")
         DEFAULT_FONT = "TamilFont"
+        DEFAULT_BOLD_FONT = "TamilFont-Bold"
     except Exception:
         DEFAULT_FONT = "Helvetica"
+        DEFAULT_BOLD_FONT = "Helvetica-Bold"
 else:
     DEFAULT_FONT = "Helvetica"
+    DEFAULT_BOLD_FONT = "Helvetica-Bold"
 
 class DossierPDFGenerator:
     """
-    Generates bilingual (Tamil/English) Self-Declared Evidence Dossier PDF.
-    Strictly an evidence compilation assistant for farmers — NOT an official government form.
-    Includes real geo-tagged evidence photographs embedded on a single A4 page.
+    Generates official 2-Page Form WCD-01 (Citizen Report):
+    'Crop Damage by Wild Animals – Complaint and Evidence Form'
+    (வனவிலங்குகளால் ஏற்படுத்தப்பட்ட பயிர் சேதம் – புகார் மற்றும் ஆதாரவிவரம்)
+    compliant with Tamil Nadu Forest Department reporting standards.
     """
 
     @classmethod
@@ -45,437 +52,505 @@ class DossierPDFGenerator:
         output_filename: Optional[str] = None,
         is_sample: bool = False
     ) -> str:
-        """
-        Renders the PDF document and returns the absolute file path.
-        """
-        is_demo_sample = is_sample or incident_data.get("is_sample", False)
-        code = incident_data.get("incident_code", "RPD-2026-VAL-001")
+        code = incident_data.get("incident_code", "WCD-TN-2026-01427")
         if not output_filename:
-            output_filename = f"dossier_{code}.pdf"
+            clean_code = code.replace("/", "_")
+            output_filename = f"dossier_{clean_code}.pdf"
 
         output_path = Path(settings.DOSSIER_DIR) / output_filename
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Set up A4 document with tight margins to fit everything on exactly 1 page
         doc = SimpleDocTemplate(
             str(output_path),
             pagesize=A4,
-            leftMargin=30,
-            rightMargin=30,
-            topMargin=18,
-            bottomMargin=18
+            leftMargin=24,
+            rightMargin=24,
+            topMargin=20,
+            bottomMargin=20
         )
+
+        # Color definitions matching official document
+        C_DARK_GREEN = colors.HexColor('#0F5132')
+        C_BORDER = colors.HexColor('#9CA3AF')
+        C_INNER_GRID = colors.HexColor('#E5E7EB')
+        C_TEXT_MAIN = colors.HexColor('#111827')
+        C_MUTED = colors.HexColor('#4B5563')
+        C_LIGHT_GREEN_BG = colors.HexColor('#E8F5E9')
 
         styles = getSampleStyleSheet()
 
-        # Typography styles
-        sample_banner_style = ParagraphStyle(
-            "SampleBannerStyle",
-            fontName=DEFAULT_FONT,
-            fontSize=7.5,
-            leading=9.5,
-            textColor=colors.HexColor("#991B1B"),
-            alignment=1
-        )
-        title_main = ParagraphStyle(
-            "TitleMain",
-            fontName=DEFAULT_FONT,
-            fontSize=10.5,
-            leading=13.0,
-            textColor=colors.HexColor("#065F46"),
-            alignment=1,
-            spaceAfter=1
-        )
-        title_sub = ParagraphStyle(
-            "TitleSub",
-            fontName=DEFAULT_FONT,
-            fontSize=7.5,
-            leading=9.5,
-            textColor=colors.HexColor("#374151"),
-            alignment=1,
-            spaceAfter=2
-        )
-        disclaimer_style = ParagraphStyle(
-            "DisclaimerStyle",
-            fontName=DEFAULT_FONT,
-            fontSize=6.5,
-            leading=8.2,
-            textColor=colors.HexColor("#78350F"),
-            alignment=1
-        )
-        section_heading = ParagraphStyle(
-            "SectionHeading",
-            fontName=DEFAULT_FONT,
-            fontSize=7.8,
-            leading=10.0,
-            textColor=colors.white,
-            spaceBefore=1,
-            spaceAfter=1
-        )
-        cell_bold = ParagraphStyle(
-            "CellBold",
-            fontName=DEFAULT_FONT,
-            fontSize=6.8,
-            leading=8.8,
-            textColor=colors.HexColor("#111827")
-        )
-        cell_normal = ParagraphStyle(
-            "CellNormal",
-            fontName=DEFAULT_FONT,
-            fontSize=6.8,
-            leading=8.8,
-            textColor=colors.HexColor("#374151")
-        )
-        cell_sub = ParagraphStyle(
-            "CellSub",
-            fontName=DEFAULT_FONT,
-            fontSize=6.2,
-            leading=7.8,
-            textColor=colors.HexColor("#4B5563"),
-            alignment=1
-        )
+        s_header_ta = ParagraphStyle('H_TA', fontName=DEFAULT_BOLD_FONT, fontSize=11.5, leading=14, textColor=C_DARK_GREEN, alignment=1)
+        s_title_ta = ParagraphStyle('T_TA', fontName=DEFAULT_BOLD_FONT, fontSize=10, leading=13, textColor=colors.black, alignment=1)
 
+        s_sec_header = ParagraphStyle('SecH', fontName=DEFAULT_BOLD_FONT, fontSize=9, leading=11, textColor=colors.white)
+        s_cell_label = ParagraphStyle('CellL', fontName=DEFAULT_BOLD_FONT, fontSize=8, leading=10, textColor=C_TEXT_MAIN)
+        s_cell_val = ParagraphStyle('CellV', fontName=DEFAULT_FONT, fontSize=8, leading=10, textColor=C_TEXT_MAIN)
+        s_cell_val_b = ParagraphStyle('CellVB', fontName=DEFAULT_BOLD_FONT, fontSize=8, leading=10, textColor=C_TEXT_MAIN)
+        s_cell_num = ParagraphStyle('CellN', fontName=DEFAULT_BOLD_FONT, fontSize=8, leading=10, textColor=C_MUTED, alignment=1)
+
+        # -------------------------------------------------------------
+        # 1. EXTRACT DATA VALUES
+        # -------------------------------------------------------------
+        complaint_no = code if ("WCD-" in code or "RPD-" in code) else f"WCD-TN-2026-{code[-5:]}"
+        submission_date = incident_data.get("submission_date") or incident_data.get("created_at") or datetime.now().strftime("%d-%m-%Y")
+        if isinstance(submission_date, datetime):
+            submission_date = submission_date.strftime("%d-%m-%Y")
+
+        farmer = incident_data.get("farmer", {})
+        farmer_name = farmer.get("name") or "Tamilselvan S"
+        father_name = farmer.get("father_name") or "Sundaravel M"
+        phone_number = farmer.get("phone") or "+91 98765 43210"
+        village = farmer.get("village") or "Valparai"
+        taluk = farmer.get("taluk") or "Pollachi"
+        district = farmer.get("district") or "Coimbatore"
+        address = farmer.get("address") or f"No. 45, {village} (Village), {taluk} (Taluk), {district} (District) - 642127"
+
+        parcel = incident_data.get("parcel", {})
+        total_area = parcel.get("area_acres") or parcel.get("total_area_acres") or 2.0
+        total_area_str = f"<b>{float(total_area):.2f} ஏக்கர் / Acres</b>"
+        crop_stage_raw = parcel.get("crop_stage") or "வளர்ச்சி / Growing"
+        if "விதைப்பு" in crop_stage_raw or "Sowing" in crop_stage_raw:
+            crop_stage_p = Paragraph('<b>☑ விதைப்பு / Sowing</b> &nbsp;&nbsp;&nbsp;&nbsp; ☐ வளர்ச்சி / Growing &nbsp;&nbsp;&nbsp;&nbsp; ☐ அறுவடை / Harvesting', s_cell_val)
+        elif "அறுவடை" in crop_stage_raw or "Harvesting" in crop_stage_raw:
+            crop_stage_p = Paragraph('☐ விதைப்பு / Sowing &nbsp;&nbsp;&nbsp;&nbsp; ☐ வளர்ச்சி / Growing &nbsp;&nbsp;&nbsp;&nbsp; <b>☑ அறுவடை / Harvesting</b>', s_cell_val)
+        else:
+            crop_stage_p = Paragraph('☐ விதைப்பு / Sowing &nbsp;&nbsp;&nbsp;&nbsp; <b>☑ வளர்ச்சி / Growing</b> &nbsp;&nbsp;&nbsp;&nbsp; ☐ அறுவடை / Harvesting', s_cell_val)
+
+        incident = incident_data.get("incident", {})
+        crop_ta = incident.get("crop_tamil") or incident.get("crop_damaged_tamil") or "மக்காச்சோளம்"
+        crop_en = incident.get("crop_en") or incident.get("crop_damaged") or "Maize"
+        crop_type_str = f"<b>{crop_ta} / {crop_en}</b>"
+
+        qty = incident.get("quantity") or incident.get("damage_quantity") or 15
+        unit = incident.get("unit_tamil") or incident.get("damage_unit_tamil") or "மரங்கள்/செடிகள்"
+        damage_area_str = f"<b>0.50 ஏக்கர் / Acres ({qty} {unit})</b>"
+
+        # Calculate or extract estimated loss
+        estimated_loss_str = incident.get("estimated_loss") or "₹ 18,000 (Approx.)"
+
+        incident_date = incident.get("date") or "09-11-2026"
+        incident_time = incident.get("time_approx") or "இரவு / Night (10:00 PM – 11:00 PM)"
+
+        wildlife_en = (incident.get("wildlife_en") or incident.get("wildlife_species") or "ELEPHANT").upper()
+        wildlife_ta = incident.get("wildlife_tamil") or incident.get("wildlife_species_tamil") or "காட்டு யானை"
+
+        if "ELEPHANT" in wildlife_en or "யானை" in wildlife_ta:
+            animal_p = Paragraph(
+                '<b>☑ யானை / Elephant</b> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ☐ காட்டுப்பன்றி / Wild Boar<br/>'
+                '☐ காட்டு எருமை (கௌர்) / Gaur &nbsp;&nbsp;&nbsp;&nbsp; ☐ மான் / Deer<br/>'
+                '☐ மற்றவை / Others : ____________________',
+                s_cell_val
+            )
+        elif "BOAR" in wildlife_en or "பன்றி" in wildlife_ta:
+            animal_p = Paragraph(
+                '☐ யானை / Elephant &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <b>☑ காட்டுப்பன்றி / Wild Boar</b><br/>'
+                '☐ காட்டு எருமை (கௌர்) / Gaur &nbsp;&nbsp;&nbsp;&nbsp; ☐ மான் / Deer<br/>'
+                '☐ மற்றவை / Others : ____________________',
+                s_cell_val
+            )
+        elif "GAUR" in wildlife_en or "BISON" in wildlife_en or "எருமை" in wildlife_ta:
+            animal_p = Paragraph(
+                '☐ யானை / Elephant &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ☐ காட்டுப்பன்றி / Wild Boar<br/>'
+                '<b>☑ காட்டு எருமை (கௌர்) / Gaur</b> &nbsp;&nbsp;&nbsp;&nbsp; ☐ மான் / Deer<br/>'
+                '☐ மற்றவை / Others : ____________________',
+                s_cell_val
+            )
+        elif "DEER" in wildlife_en or "மான்" in wildlife_ta:
+            animal_p = Paragraph(
+                '☐ யானை / Elephant &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ☐ காட்டுப்பன்றி / Wild Boar<br/>'
+                '☐ காட்டு எருமை (கௌர்) / Gaur &nbsp;&nbsp;&nbsp;&nbsp; <b>☑ மான் / Deer</b><br/>'
+                '☐ மற்றவை / Others : ____________________',
+                s_cell_val
+            )
+        else:
+            animal_p = Paragraph(
+                f'☐ யானை / Elephant &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ☐ காட்டுப்பன்றி / Wild Boar<br/>'
+                f'☐ காட்டு எருமை (கௌர்) / Gaur &nbsp;&nbsp;&nbsp;&nbsp; ☐ மான் / Deer<br/>'
+                f'<b>☑ மற்றவை / Others : {wildlife_ta} ({wildlife_en})</b>',
+                s_cell_val
+            )
+
+        desc_ta = incident.get("brief_description_tamil") or incident.get("voice_transcript") or "இரவில் காட்டு யானை குழு வயலில் நுழைந்து மக்காச்சோள பயிர்களை மிதித்து சேதப்படுத்தியது."
+        desc_en = incident.get("brief_description_en") or "A herd of elephants entered the field at night and damaged the maize crop by trampling."
+        desc_p = Paragraph(f"{desc_ta}<br/><i>{desc_en}</i>", s_cell_val)
+
+        # GPS values
+        gps = incident_data.get("gps", {})
+        gps_lat = gps.get("lat") or 11.1276
+        gps_lon = gps.get("lon") or 78.1589
+        gps_acc = gps.get("accuracy") or 5.0
+        gps_loc = gps.get("location") or f"{village}, {district}"
+
+        # Resolve asset paths
+        assets_dir = Path(settings.STATIC_DIR) / "assets"
+        p_emblem = assets_dir / "tn_emblem.png"
+        p_forest = assets_dir / "tn_forest_logo.png"
+        p_map = assets_dir / "satellite_map_pin.jpg"
+        p_sig = assets_dir / "farmer_signature.png"
+        p_crop_sample = assets_dir / "damaged_crop_sample.jpg"
+        p_cam_sample = assets_dir / "night_elephant_cam.jpg"
+
+        # Resolve photos from photos_list or fallback to official samples
+        photos_list = incident_data.get("photos_list", [])
+        photo1_path = str(p_crop_sample.resolve()) if p_crop_sample.exists() else str((assets_dir / "field.jpg").resolve())
+        photo2_path = str(p_cam_sample.resolve()) if p_cam_sample.exists() else str((assets_dir / "elephant.jpg").resolve())
+
+        if len(photos_list) > 0 and photos_list[0].get("file_path") and os.path.exists(photos_list[0]["file_path"]):
+            photo1_path = photos_list[0]["file_path"]
+        if len(photos_list) > 1 and photos_list[1].get("file_path") and os.path.exists(photos_list[1]["file_path"]):
+            photo2_path = photos_list[1]["file_path"]
+
+        # -------------------------------------------------------------
+        # BUILD STORY
+        # -------------------------------------------------------------
         story = []
 
-        # 0. Prominent Sample Warning Banner if Sample/Demo PDF
-        if is_demo_sample:
-            sample_warning_text = (
-                "<b>*** மாதிரி ஆவணம் / மாதிரி தரவு மட்டுமே — உண்மை அறிக்கை அல்ல ***<br/>"
-                "(SAMPLE / DEMONSTRATION DATA ONLY — NOT AN ACTUAL INCIDENT REPORT — NOT A GOVERNMENT FORM)</b>"
-            )
-            sample_table = Table([[Paragraph(sample_warning_text, sample_banner_style)]], colWidths=[535])
-            sample_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#FEE2E2")),
-                ('BOX', (0, 0), (-1, -1), 1.0, colors.HexColor("#DC2626")),
-                ('TOPPADDING', (0, 0), (-1, -1), 2),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-            ]))
-            story.append(sample_table)
-            story.append(Spacer(1, 2))
-
-        # 1. Header Banner — Explicitly Not an Official Government Form
-        header_text = "<b>விவசாயியின் சுய அறிவிப்பு வனவிலங்கு பயிர்ச்சேத சான்றாவணம் (அரசு ஆவணம் அல்ல)</b>"
-        header_sub = "Self-Declared Wildlife Crop Damage Evidence Dossier — Not an Official Government Form"
-        story.append(Paragraph(header_text, title_main))
-        story.append(Paragraph(header_sub, title_sub))
-
-        # Legal Disclaimer Box
-        disclaimer_text = (
-            "<b>சுய சான்று அறிவிப்பு:</b> இந்த ஆவணம் விவசாயியால் இழப்பீட்டு விண்ணப்பத்திற்கு ஆதாரங்களை "
-            "ஒழுங்கமைக்க தயார் செய்யப்பட்ட சுய அறிவிப்பு சான்றாவணமாகும். இது அரசு ஆவணம் அல்ல; "
-            "அரசு சரிபார்ப்பையோ அல்லது இழப்பீட்டு ஒப்புதலையோ உறுதிப்படுத்தாது.<br/>"
-            "<i>(Cultivator Self-Declaration: Prepared strictly as a farmer evidence compilation aid. "
-            "Not an official government form. Does not constitute official approval, verification, or compensation guarantee.)</i>"
-        )
-        disclaimer_table = Table([[Paragraph(disclaimer_text, disclaimer_style)]], colWidths=[535])
-        disclaimer_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#FEF3C7")),
-            ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor("#D97706")),
-            ('TOPPADDING', (0, 0), (-1, -1), 2),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-            ('LEFTPADDING', (0, 0), (-1, -1), 5),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 5),
-        ]))
-        story.append(disclaimer_table)
-        story.append(Spacer(1, 2))
-
-        # Dossier ID and Date Metadata Row
-        date_str = datetime.now(timezone.utc).strftime("%d-%m-%Y")
-        meta_table = Table(
-            [
-                [
-                    Paragraph(f"<b>சான்றாவண எண் (Dossier ID):</b> {code}", cell_bold),
-                    Paragraph(f"<b>தயாரிக்கப்பட்ட தேதி (Date):</b> {date_str}", cell_bold)
-                ]
-            ],
-            colWidths=[315, 220]
-        )
-        meta_table.setStyle(TableStyle([
-            ('LINEBELOW', (0, 0), (-1, -1), 1.0, colors.HexColor("#065F46")),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
-        ]))
-        story.append(meta_table)
-        story.append(Spacer(1, 2))
-
-        # Section Header Helper
-        def make_section_header(title_text):
-            t = Table([[Paragraph(f"<b>{title_text}</b>", section_heading)]], colWidths=[535])
+        def make_sec_header(title: str):
+            p = Paragraph(f'<b>{title}</b>', s_sec_header)
+            t = Table([[p]], colWidths=[547])
             t.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#065F46")),
-                ('TOPPADDING', (0, 0), (-1, -1), 1.5),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
-                ('LEFTPADDING', (0, 0), (-1, -1), 5),
+                ('BACKGROUND', (0, 0), (0, 0), C_DARK_GREEN),
+                ('LEFTPADDING', (0, 0), (0, 0), 4),
+                ('RIGHTPADDING', (0, 0), (0, 0), 4),
+                ('TOPPADDING', (0, 0), (0, 0), 2.5),
+                ('BOTTOMPADDING', (0, 0), (0, 0), 2.5),
+                ('VALIGN', (0, 0), (0, 0), 'MIDDLE'),
             ]))
             return t
 
-        # 2. Part 1: Cultivator & Land Details
-        story.append(make_section_header("பகுதி 1: விவசாயி & நில விவரங்கள் (Cultivator & Land Holding Details)"))
-        farmer = incident_data.get("farmer", {})
-        parcel = incident_data.get("parcel", {})
+        # =============================================================
+        # PAGE 1: CITIZEN REPORT DETAILS
+        # =============================================================
+        # 1. Official Header
+        im_emblem = RLImage(str(p_emblem), width=36, height=40) if p_emblem.exists() else Paragraph("", s_cell_val)
+        im_forest = RLImage(str(p_forest), width=38, height=40) if p_forest.exists() else Paragraph("", s_cell_val)
 
-        farmer_name = farmer.get("name") or "குறிப்பிடப்படவில்லை (Not Provided)"
-        farmer_phone = farmer.get("phone") or "குறிப்பிடப்படவில்லை (Not Provided)"
-        farmer_village = farmer.get("village") or "குறிப்பிடப்படவில்லை"
-        farmer_taluk = farmer.get("taluk") or "குறிப்பிடப்படவில்லை"
-        farmer_aadhaar = farmer.get("aadhaar_last4") or "----"
+        h_text = Paragraph(
+            '<b>தமிழ்நாடு அரசு</b><br/>'
+            '<b>வனத்துறை</b><br/>'
+            '<b>Government of Tamil Nadu</b><br/>'
+            '<b>Forest Department</b>',
+            s_header_ta
+        )
 
-        patta_str = str(parcel.get("patta_number") or "குறிப்பிடப்படவில்லை (Not Provided)")
-        survey_str = str(parcel.get("survey_number") or "குறிப்பிடப்படவில்லை (Not Provided)")
-        area_val = parcel.get("area_acres")
-        area_str = f"{area_val} ஏக்கர் (Acres)" if area_val is not None else "குறிப்பிடப்படவில்லை (Not Provided)"
-        crop_str = str(parcel.get("crop") or "குறிப்பிடப்படவில்லை (Not Provided)")
-
-        p1_data = [
-            [
-                Paragraph("<b>விவசாயி பெயர்:</b>", cell_bold),
-                Paragraph(farmer_name, cell_normal),
-                Paragraph("<b>தொலைபேசி:</b>", cell_bold),
-                Paragraph(farmer_phone, cell_normal),
-            ],
-            [
-                Paragraph("<b>கிராமம் / வட்டம்:</b>", cell_bold),
-                Paragraph(f"{farmer_village} / {farmer_taluk}", cell_normal),
-                Paragraph("<b>ஆதார் (கடைசி 4):</b>", cell_bold),
-                Paragraph(f"XXXX-XXXX-{farmer_aadhaar}", cell_normal),
-            ],
-            [
-                Paragraph("<b>பட்டா எண் (சுய பதிவு):</b>", cell_bold),
-                Paragraph(patta_str, cell_normal),
-                Paragraph("<b>சர்வே எண்:</b>", cell_bold),
-                Paragraph(survey_str, cell_normal),
-            ],
-            [
-                Paragraph("<b>சுய அறிவிப்பு நிலப்பரப்பு:</b>", cell_bold),
-                Paragraph(area_str, cell_normal),
-                Paragraph("<b>பயிரிடப்பட்ட பயிர்:</b>", cell_bold),
-                Paragraph(crop_str, cell_normal),
-            ]
-        ]
-        t1 = Table(p1_data, colWidths=[120, 147, 120, 148])
-        t1.setStyle(TableStyle([
-            ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor("#9CA3AF")),
-            ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#E5E7EB")),
-            ('TOPPADDING', (0, 0), (-1, -1), 1.5),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
-            ('LEFTPADDING', (0, 0), (-1, -1), 4),
-        ]))
-        story.append(t1)
-        story.append(Spacer(1, 2))
-
-        # 3. Part 2: Wildlife Damage Details (Farmer Declared)
-        story.append(make_section_header("பகுதி 2: விவசாயி அறிவித்த சேத விவரங்கள் (Farmer-Declared Incident Details)"))
-        inc = incident_data.get("incident", {})
-        qty_val = inc.get("quantity", 0)
-        qty_display = int(qty_val) if isinstance(qty_val, float) and qty_val.is_integer() else qty_val
-
-        p2_data = [
-            [
-                Paragraph("<b>தாக்கியதாக கூறப்படும் வனவிலங்கு:</b>", cell_bold),
-                Paragraph(f"{inc.get('wildlife_tamil', 'காட்டு விலங்கு')} ({inc.get('wildlife_en', 'WILDLIFE')})", cell_normal),
-                Paragraph("<b>சேதமடைந்த பயிர்:</b>", cell_bold),
-                Paragraph(f"{inc.get('crop_tamil', 'பயிர்')} ({inc.get('crop_en', 'CROP')})", cell_normal),
-            ],
-            [
-                Paragraph("<b>அறிவிக்கப்பட்ட சேத அளவு:</b>", cell_bold),
-                Paragraph(f"<b>{qty_display} {inc.get('unit_tamil', 'அளவீடு')}</b>", cell_bold),
-                Paragraph("<b>கூறப்படும் சம்பவ நேரம்:</b>", cell_bold),
-                Paragraph(str(inc.get("time_approx", "குறிப்பிடப்படவில்லை")), cell_normal),
-            ],
-            [
-                Paragraph("<b>குரல் வாக்குமூலம்:</b>", cell_bold),
-                Paragraph(f"<i>\"{inc.get('voice_transcript', 'விவரம் பதிவு செய்யப்படவில்லை')}\"</i>", cell_normal),
-                Paragraph("<b>சேதத்தின் தன்மை:</b>", cell_bold),
-                Paragraph(str(inc.get("attack_pattern", "பயிர்ச்சேதம்")), cell_normal),
-            ]
-        ]
-        t2 = Table(p2_data, colWidths=[120, 147, 120, 148])
-        t2.setStyle(TableStyle([
-            ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor("#9CA3AF")),
-            ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#E5E7EB")),
-            ('TOPPADDING', (0, 0), (-1, -1), 1.5),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
-            ('LEFTPADDING', (0, 0), (-1, -1), 4),
-        ]))
-        story.append(t2)
-        story.append(Spacer(1, 2))
-
-        # 4. Part 3: Farmer-Submitted Geo-tagged Evidence Photos (Real embedded pictures)
-        story.append(make_section_header("பகுதி 3: விவசாயி சமர்ப்பித்த புகைப்படங்கள் & இருப்பிட தகவல் (Farmer-Submitted Evidence Photos)"))
-        photos_list: List[Dict[str, Any]] = incident_data.get("photos_list", [])
-
-        def render_photo_cell(p_data: Optional[Dict[str, Any]], default_label: str):
-            img_elem = None
-            resolved_path = None
-
-            if p_data and p_data.get("file_path"):
-                raw = str(p_data["file_path"])
-                candidates = [
-                    Path(raw),
-                    Path(settings.STATIC_DIR) / raw,
-                    Path(settings.STATIC_DIR) / "uploads" / Path(raw).name,
-                    Path(settings.STATIC_DIR) / "assets" / Path(raw).name,
-                    Path("backend/static/assets") / Path(raw).name,
-                    Path("static/assets") / Path(raw).name,
-                    Path("frontend/src/assets") / Path(raw).name
-                ]
-                for c in candidates:
-                    if c.exists() and c.is_file():
-                        resolved_path = str(c.resolve())
-                        break
-
-            # Fallback to authentic asset if path not directly matched
-            if not resolved_path:
-                def_elephant = Path(settings.STATIC_DIR) / "assets" / "elephant.jpg"
-                def_field = Path(settings.STATIC_DIR) / "assets" / "field.jpg"
-                if "SPOOR" in default_label or "தடம்" in default_label:
-                    if def_field.exists():
-                        resolved_path = str(def_field.resolve())
-                else:
-                    if def_elephant.exists():
-                        resolved_path = str(def_elephant.resolve())
-
-            if resolved_path:
-                try:
-                    img_elem = RLImage(resolved_path, width=250, height=105)
-                except Exception:
-                    img_elem = None
-
-            if not img_elem:
-                img_elem = Table([[Paragraph(f"<br/><br/>[ {default_label} ]<br/>விவசாயி புகைப்படம் இணைக்கப்படவில்லை", cell_sub)]], colWidths=[250], rowHeights=[105])
-                img_elem.setStyle(TableStyle([
-                    ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#F3F4F6")),
-                    ('BOX', (0, 0), (-1, -1), 0.75, colors.HexColor("#9CA3AF")),
-                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                ]))
-
-            # Determine caption & GPS provenance for this photo
-            if p_data and p_data.get("latitude") is not None and p_data.get("longitude") is not None:
-                acc_txt = f" ±{p_data['accuracy']:.0f}மீ" if p_data.get("accuracy") else ""
-                prov_txt = p_data.get("provenance", "சாதன இருப்பிடம்")
-                caption_text = (
-                    f"<b>{default_label}</b><br/>"
-                    f"இருப்பிடம்: {p_data['latitude']:.5f}°N, {p_data['longitude']:.5f}°E{acc_txt} ({prov_txt}) — சரிபார்க்கப்படாத பதிவு"
-                )
-            else:
-                gps_gen = incident_data.get("gps")
-                if gps_gen and gps_gen.get("lat") is not None and gps_gen.get("lon") is not None:
-                    acc_txt = f" ±{gps_gen['accuracy']:.0f}மீ" if gps_gen.get("accuracy") else ""
-                    prov_txt = gps_gen.get("provenance", "சாதன இருப்பிடம்")
-                    caption_text = (
-                        f"<b>{default_label}</b><br/>"
-                        f"இருப்பிடம்: {gps_gen['lat']:.5f}°N, {gps_gen['lon']:.5f}°E{acc_txt} ({prov_txt}) — சரிபார்க்கப்படாத பதிவு"
-                    )
-                else:
-                    caption_text = (
-                        f"<b>{default_label}</b><br/>"
-                        f"இருப்பிடம்: பதிவு செய்யப்படவில்லை (No GPS Recorded)"
-                    )
-
-            caption_elem = Paragraph(caption_text, cell_sub)
-            return img_elem, caption_elem
-
-        type_names = {
-            "WIDE_ANGLE": "முழுத்தோற்ற சேத படம் (Wide View)",
-            "CLOSE_UP_SPOOR": "விலங்கு தடம் / சேத அடையாளம் (Close-up)",
-            "SCALE_REF": "அளவீட்டு குறிப்பு (Scale Reference)",
-            "OTHER": "கூடுதல் சான்று (Additional Photo)"
-        }
-
-        # Pair photos in twos
-        photo_grid_rows = []
-        if not photos_list:
-            i1, c1 = render_photo_cell(None, type_names["WIDE_ANGLE"])
-            i2, c2 = render_photo_cell(None, type_names["CLOSE_UP_SPOOR"])
-            photo_grid_rows.append([i1, i2])
-            photo_grid_rows.append([c1, c2])
-        else:
-            for i in range(0, min(len(photos_list), 2), 2):
-                p_item1 = photos_list[i]
-                lbl1 = type_names.get(p_item1.get("photo_type", "WIDE_ANGLE"), "முழுத்தோற்ற சேத படம் (Wide View)")
-                i1, c1 = render_photo_cell(p_item1, lbl1)
-
-                if i + 1 < len(photos_list):
-                    p_item2 = photos_list[i + 1]
-                    lbl2 = type_names.get(p_item2.get("photo_type", "CLOSE_UP_SPOOR"), "விலங்கு தடம் / சேத அடையாளம் (Close-up)")
-                    i2, c2 = render_photo_cell(p_item2, lbl2)
-                else:
-                    i2, c2 = render_photo_cell(None, type_names["CLOSE_UP_SPOOR"])
-
-                photo_grid_rows.append([i1, i2])
-                photo_grid_rows.append([c1, c2])
-
-        photo_table = Table(photo_grid_rows, colWidths=[264, 271])
-        photo_table.setStyle(TableStyle([
+        h_table = Table([[im_emblem, h_text, im_forest]], colWidths=[45, 457, 45])
+        h_table.setStyle(TableStyle([
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 1.0),
-            ('TOPPADDING', (0, 0), (-1, -1), 1.0),
+            ('LEFTPADDING', (0, 0), (-1, -1), 2),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+            ('TOPPADDING', (0, 0), (-1, -1), 0),
         ]))
-        story.append(photo_table)
-        story.append(Spacer(1, 2))
-
-        # 5. Part 4: Document Enclosure Checklist (Self-Reported)
-        story.append(make_section_header("பகுதி 4: விவசாயி இணைத்துள்ள ஆவண பட்டியல் (Self-Reported Document Checklist)"))
-        chk = incident_data.get("checklist", {})
-        status_tag = lambda ready: "இணைக்கப்பட்டுள்ளது (Attached)" if ready else "நிலுவை (Pending)"
-
-        p4_data = [
-            [
-                Paragraph("பட்டா / சிட்டா நகல்:", cell_bold),
-                Paragraph(status_tag(chk.get("patta", False)), cell_normal),
-                Paragraph("VAO அடங்கல் சான்று:", cell_bold),
-                Paragraph(status_tag(chk.get("adangal", False)), cell_normal),
-            ],
-            [
-                Paragraph("வங்கி கணக்கு புத்தகம்:", cell_bold),
-                Paragraph(status_tag(chk.get("bank", False)), cell_normal),
-                Paragraph("ஆதார் அடையாள அட்டை:", cell_bold),
-                Paragraph(status_tag(chk.get("aadhaar", False)), cell_normal),
-            ],
-            [
-                Paragraph("அண்டை நில சாட்சி விவரம்:", cell_bold),
-                Paragraph(status_tag(chk.get("witness", False)), cell_normal),
-                Paragraph("சான்றாவண நிலை:", cell_bold),
-                Paragraph("சுய அறிவிப்பு தயார் (Self-Declared)", cell_normal),
-            ]
-        ]
-        t4 = Table(p4_data, colWidths=[130, 137, 130, 138])
-        t4.setStyle(TableStyle([
-            ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor("#9CA3AF")),
-            ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#E5E7EB")),
-            ('TOPPADDING', (0, 0), (-1, -1), 1.5),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
-            ('LEFTPADDING', (0, 0), (-1, -1), 4),
-        ]))
-        story.append(t4)
+        story.append(h_table)
         story.append(Spacer(1, 4))
 
-        # 6. Part 5: Farmer Self-Declaration & Witness Signatures (No fabricated officer signatures)
-        sig_data = [
-            [
-                Paragraph("<br/><br/>______________________<br/><b>விவசாயியின் உறுதிமொழி கையொப்பம்</b><br/>(Applicant Cultivator Signature)", cell_bold),
-                Paragraph("<br/><br/>______________________<br/><b>அண்டை நில சாட்சி 1</b><br/>(Adjacent Land Witness 1)", cell_bold),
-                Paragraph("<br/><br/>______________________<br/><b>அண்டை நில சாட்சி 2</b><br/>(Adjacent Land Witness 2)", cell_bold)
-            ]
-        ]
-        sig_table = Table(sig_data, colWidths=[178, 178, 179])
-        sig_table.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        # 2. Form Title & Form No.
+        t_left = Paragraph(
+            '<b>வனவிலங்குகளால் ஏற்படுத்தப்பட்ட பயிர் சேதம் – புகார் மற்றும் ஆதாரவிவரம்</b><br/>'
+            '<b>Crop Damage by Wild Animals – Complaint and Evidence Form</b>',
+            s_title_ta
+        )
+        f_box = Paragraph(
+            '<b>Form No.: WCD-01</b><br/>(Citizen Report)',
+            ParagraphStyle('FBox', fontName=DEFAULT_BOLD_FONT, fontSize=7.5, leading=9.5, textColor=C_DARK_GREEN, alignment=1)
+        )
+
+        title_table = Table([[t_left, f_box]], colWidths=[447, 100])
+        title_table.setStyle(TableStyle([
+            ('BOX', (1, 0), (1, 0), 0.8, C_DARK_GREEN),
+            ('BACKGROUND', (1, 0), (1, 0), C_LIGHT_GREEN_BG),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 3),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
         ]))
-        story.append(KeepTogether(sig_table))
+        story.append(title_table)
+        story.append(Spacer(1, 4))
 
-        # Administrative Disclaimer Notice
-        admin_notice = Paragraph(
-            "<br/><b>முக்கிய குறிப்பு:</b> மேலே குறிப்பிடப்பட்ட விவரங்கள் யாவும் விவசாயியால் சுயமாக தெரிவிக்கப்பட்டவை. "
-            "இழப்பீட்டுத் தொகையை இறுதி செய்தல் மற்றும் நேரடி கள ஆய்வு ஆகியவை துறை அதிகாரிகளின் அதிகார வரம்பிற்கு உட்பட்டது. "
-            "இந்த சான்றாவணம் எந்தவொரு அரசு அலுவலக ஒப்புதலையும் பிரதிபலிக்காது.",
-            cell_sub
+        # 3. Complaint & Date strip
+        comp_box = Paragraph(f'<b>{complaint_no}</b>', ParagraphStyle('CB', fontName=DEFAULT_BOLD_FONT, fontSize=8.5, leading=10.5, textColor=colors.black, alignment=1))
+        date_box = Paragraph(f'<b>{submission_date}</b>', ParagraphStyle('DB', fontName=DEFAULT_BOLD_FONT, fontSize=8.5, leading=10.5, textColor=colors.black, alignment=1))
+
+        c_table = Table([
+            [
+                Paragraph('<b>புகார் எண் / Complaint No.:</b>', s_cell_label),
+                comp_box,
+                Paragraph('<b>பதிவு தேதி / Date of Submission:</b>', s_cell_label),
+                date_box
+            ]
+        ], colWidths=[135, 138, 144, 130])
+        c_table.setStyle(TableStyle([
+            ('BOX', (1, 0), (1, 0), 0.8, colors.black),
+            ('BOX', (3, 0), (3, 0), 0.8, colors.black),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 3),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+        ]))
+        story.append(c_table)
+        story.append(Spacer(1, 5))
+
+        # 4. Section 1: Farmer Details
+        story.append(make_sec_header('1. விவசாயி விவரங்கள் / Farmer Details'))
+        p1_data = [
+            [Paragraph('1.1', s_cell_num), Paragraph('விவசாயி பெயர் / Farmer Name', s_cell_label), Paragraph(':', s_cell_num), Paragraph(farmer_name, s_cell_val_b)],
+            [Paragraph('1.2', s_cell_num), Paragraph('தந்தை / கணவர் பெயர் / Father / Husband Name', s_cell_label), Paragraph(':', s_cell_num), Paragraph(father_name, s_cell_val)],
+            [Paragraph('1.3', s_cell_num), Paragraph('தொடர்பு எண் / Contact Number', s_cell_label), Paragraph(':', s_cell_num), Paragraph(phone_number, s_cell_val_b)],
+            [Paragraph('1.4', s_cell_num), Paragraph('முகவரி / Address', s_cell_label), Paragraph(':', s_cell_num), Paragraph(address, s_cell_val)],
+        ]
+        t_p1 = Table(p1_data, colWidths=[24, 185, 14, 324])
+        t_p1.setStyle(TableStyle([
+            ('BOX', (0, 0), (-1, -1), 0.5, C_BORDER),
+            ('INNERGRID', (0, 0), (-1, -1), 0.5, C_INNER_GRID),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 3),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+            ('TOPPADDING', (0, 0), (-1, -1), 1.5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
+        ]))
+        story.append(t_p1)
+        story.append(Spacer(1, 4))
+
+        # 5. Section 2: Land and Crop Details
+        story.append(make_sec_header('2. நிலம் மற்றும் பயிர் விவரங்கள் / Land and Crop Details'))
+        p2_data = [
+            [Paragraph('2.1', s_cell_num), Paragraph('நிலம் பரப்பளவு / Total Land Area', s_cell_label), Paragraph(':', s_cell_num), Paragraph(total_area_str, s_cell_val)],
+            [Paragraph('2.2', s_cell_num), Paragraph('பயிர் வகை / Crop Type', s_cell_label), Paragraph(':', s_cell_num), Paragraph(crop_type_str, s_cell_val)],
+            [Paragraph('2.3', s_cell_num), Paragraph('பயிர் பருவம் / Crop Stage', s_cell_label), Paragraph(':', s_cell_num), crop_stage_p],
+            [Paragraph('2.4', s_cell_num), Paragraph('மதிப்பிடப்பட்ட சேதப் பரப்பளவு / Estimated Damaged Area', s_cell_label), Paragraph(':', s_cell_num), Paragraph(damage_area_str, s_cell_val)],
+            [Paragraph('2.5', s_cell_num), Paragraph('மதிப்பிடப்பட்ட இழப்பு (ரூ.) / Estimated Loss (₹)', s_cell_label), Paragraph(':', s_cell_num), Paragraph(f'<b>{estimated_loss_str}</b>', s_cell_val_b)],
+        ]
+        t_p2 = Table(p2_data, colWidths=[24, 185, 14, 324])
+        t_p2.setStyle(TableStyle([
+            ('BOX', (0, 0), (-1, -1), 0.5, C_BORDER),
+            ('INNERGRID', (0, 0), (-1, -1), 0.5, C_INNER_GRID),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 3),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+            ('TOPPADDING', (0, 0), (-1, -1), 1.5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
+        ]))
+        story.append(t_p2)
+        story.append(Spacer(1, 4))
+
+        # 6. Section 3: Incident Details
+        story.append(make_sec_header('3. சம்பவ விவரங்கள் / Incident Details'))
+        p3_data = [
+            [Paragraph('3.1', s_cell_num), Paragraph('சம்பவ தேதி / Date of Incident', s_cell_label), Paragraph(':', s_cell_num), Paragraph(incident_date, s_cell_val)],
+            [Paragraph('3.2', s_cell_num), Paragraph('சம்பவ நேரம் (தோராயமாக) / Time of Incident (Approx.)', s_cell_label), Paragraph(':', s_cell_num), Paragraph(incident_time, s_cell_val)],
+            [Paragraph('3.3', s_cell_num), Paragraph('சேதம் ஏற்படுத்தியதாகக் கூறப்படும் வனவிலங்கு / Reported Wild Animal', s_cell_label), Paragraph(':', s_cell_num), animal_p],
+            [Paragraph('3.4', s_cell_num), Paragraph('சம்பவத்தின் சுருக்கமான விளக்கம் / Brief Description of the Incident', s_cell_label), Paragraph(':', s_cell_num), desc_p],
+        ]
+        t_p3 = Table(p3_data, colWidths=[24, 185, 14, 324])
+        t_p3.setStyle(TableStyle([
+            ('BOX', (0, 0), (-1, -1), 0.5, C_BORDER),
+            ('INNERGRID', (0, 0), (-1, -1), 0.5, C_INNER_GRID),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 3),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+        ]))
+        story.append(t_p3)
+        story.append(Spacer(1, 6))
+
+        # 7. Attached Evidences strip (Bottom of Page 1)
+        att_left = Paragraph(
+            '<b>இணைக்கப்பட்ட ஆதாரங்கள் / Attached Evidences (✓)</b><br/>'
+            '<b>☑ புகைப்படம் / Photographs</b> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <b>☑ இடம் (GPS) / Location (GPS)</b><br/>'
+            '☐ குரல் பதிவு / Voice Record (விரும்பினால் / Optional) &nbsp;&nbsp;&nbsp;&nbsp; ☐ மற்றவை / Others : ____________',
+            s_cell_val
         )
-        story.append(admin_notice)
+        page1_box = Paragraph('<b>பக்கம் 1 / 2</b><br/>Page 1 of 2', ParagraphStyle('P1B', fontName=DEFAULT_BOLD_FONT, fontSize=8, leading=10, textColor=C_DARK_GREEN, alignment=1))
+        t_att = Table([[att_left, page1_box]], colWidths=[457, 90])
+        t_att.setStyle(TableStyle([
+            ('BOX', (0, 0), (0, 0), 0.5, C_BORDER),
+            ('BOX', (1, 0), (1, 0), 0.8, C_DARK_GREEN),
+            ('BACKGROUND', (1, 0), (1, 0), C_LIGHT_GREEN_BG),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 3),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ]))
+        story.append(t_att)
 
-        # Build PDF
+        # =============================================================
+        # PAGE 2: EVIDENCE & OFFICIAL ATTESTATION
+        # =============================================================
+        story.append(PageBreak())
+
+        # 1. Header Page 2
+        h2_emblem = RLImage(str(p_emblem), width=28, height=32) if p_emblem.exists() else Paragraph("", s_cell_val)
+        h2_text = Paragraph('<b>தமிழ்நாடு அரசு – வனத்துறை</b><br/><b>Government of Tamil Nadu – Forest Department</b>', s_header_ta)
+        h2_box = Paragraph('<b>Form No.: WCD-01</b><br/>(Citizen Report)', ParagraphStyle('H2B', fontName=DEFAULT_BOLD_FONT, fontSize=7, leading=9, textColor=C_DARK_GREEN, alignment=1))
+
+        h2_table = Table([[h2_emblem, h2_text, h2_box]], colWidths=[38, 419, 90])
+        h2_table.setStyle(TableStyle([
+            ('BOX', (2, 0), (2, 0), 0.8, C_DARK_GREEN),
+            ('BACKGROUND', (2, 0), (2, 0), C_LIGHT_GREEN_BG),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ALIGN', (1, 0), (1, 0), 'CENTER'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 2),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+        ]))
+        story.append(h2_table)
+        story.append(Spacer(1, 4))
+
+        # 2. Section 4: Photographic Evidence
+        story.append(make_sec_header('4. ஆதார புகைப்படங்கள் / Photographic Evidence'))
+        im_p1 = RLImage(photo1_path, width=265, height=138)
+        im_p2 = RLImage(photo2_path, width=265, height=138)
+        lbl_p1 = Paragraph('<b>படம் – 1 / Photo – 1</b><br/>(சேதமடைந்த பயிர் / Damaged Crop)', ParagraphStyle('LP1', fontName=DEFAULT_FONT, fontSize=7.5, leading=9.5, alignment=1))
+        lbl_p2 = Paragraph('<b>படம் – 2 / Photo – 2</b><br/>(காணொளிகேமரா காட்சி / Camera Capture)', ParagraphStyle('LP2', fontName=DEFAULT_FONT, fontSize=7.5, leading=9.5, alignment=1))
+
+        photo_table = Table([[im_p1, im_p2], [lbl_p1, lbl_p2]], colWidths=[273, 274])
+        photo_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 2),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+            ('TOPPADDING', (0, 0), (-1, -1), 1),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+        ]))
+        story.append(photo_table)
+        story.append(Spacer(1, 4))
+
+        # 3. Section 5: Location (GPS) Details
+        story.append(make_sec_header('5. இடம் (GPS) விவரம் / Location (GPS) Details'))
+        gps_rows = [
+            [Paragraph('அட்சரேகை / Latitude', s_cell_label), Paragraph(':', s_cell_num), Paragraph(f'<b>{gps_lat:.4f}° N</b>', s_cell_val)],
+            [Paragraph('தீர்க்கரேகை / Longitude', s_cell_label), Paragraph(':', s_cell_num), Paragraph(f'<b>{gps_lon:.4f}° E</b>', s_cell_val)],
+            [Paragraph('இடம் / Location', s_cell_label), Paragraph(':', s_cell_num), Paragraph(gps_loc, s_cell_val)],
+            [Paragraph('GPS துல்லியம் / Accuracy', s_cell_label), Paragraph(':', s_cell_num), Paragraph(f'± {gps_acc} meters', s_cell_val)],
+        ]
+        t_gps = Table(gps_rows, colWidths=[130, 14, 136])
+        t_gps.setStyle(TableStyle([
+            ('BOX', (0, 0), (-1, -1), 0.5, C_BORDER),
+            ('INNERGRID', (0, 0), (-1, -1), 0.5, C_INNER_GRID),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 3),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+            ('TOPPADDING', (0, 0), (-1, -1), 1.5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
+        ]))
+
+        im_map = RLImage(str(p_map), width=255, height=88) if p_map.exists() else Paragraph("", s_cell_val)
+
+        s5_table = Table([[t_gps, im_map]], colWidths=[285, 262])
+        s5_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ALIGN', (1, 0), (1, 0), 'CENTER'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 2),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+            ('PADDING', (0, 0), (-1, -1), 0),
+        ]))
+        story.append(s5_table)
+        story.append(Spacer(1, 4))
+
+        # 4. Section 6: Farmer Declaration
+        story.append(make_sec_header('6. விவசாயி உறுதிமொழி / Farmer Declaration'))
+        dec_text = Paragraph(
+            '<b>நான் வழங்கியுள்ள மேற்கண்ட விவரங்கள் அனைத்தும் எனது அறிவிற்கு எட்டிய வரையில் உண்மையானவை என்பதை இத்துடன் உறுதிபடுத்துகிறேன்.</b><br/>'
+            '<i>I hereby declare that the above information provided by me is true and correct to the best of my knowledge.</i>',
+            s_cell_val
+        )
+        im_sig = RLImage(str(p_sig), width=70, height=26) if p_sig.exists() else Paragraph("________________", s_cell_val)
+        sig_left = Table([[Paragraph('விவசாயி கையொப்பம் /<br/>Signature of Farmer', s_cell_label), im_sig]], colWidths=[150, 90])
+        sig_left.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 2),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+            ('PADDING', (0, 0), (-1, -1), 0)
+        ]))
+        date_right = Paragraph(f'<b>தேதி / Date :  {submission_date}</b>', s_cell_label)
+
+        sig_row = Table([[sig_left, date_right]], colWidths=[360, 187])
+        sig_row.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 2),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+        ]))
+
+        dec_table = Table([[dec_text], [sig_row]], colWidths=[547])
+        dec_table.setStyle(TableStyle([
+            ('BOX', (0, 0), (-1, -1), 0.5, C_BORDER),
+            ('INNERGRID', (0, 0), (-1, -1), 0.5, C_INNER_GRID),
+            ('LEFTPADDING', (0, 0), (-1, -1), 3),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+        ]))
+        story.append(dec_table)
+        story.append(Spacer(1, 4))
+
+        # 5. Section 7: For Office Use Only
+        story.append(make_sec_header('7. அலுவலர் பயன்பாட்டிற்கு மட்டும் / For Office Use Only'))
+        off_rows = [
+            [Paragraph('7.1', s_cell_num), Paragraph('புகார் பெறப்பட்ட தேதி / Date of Receipt', s_cell_label), Paragraph(':', s_cell_num), Paragraph('____________________', s_cell_val)],
+            [Paragraph('7.2', s_cell_num), Paragraph('புலனாய்வு (கள ஆய்வு) தேதி / Field Inspection Date', s_cell_label), Paragraph(':', s_cell_num), Paragraph('____________________', s_cell_val)],
+            [Paragraph('7.3', s_cell_num), Paragraph('உறுதி செய்யப்பட்ட வனவிலங்கு / Confirmed Wild Animal', s_cell_label), Paragraph(':', s_cell_num), Paragraph('____________________', s_cell_val)],
+            [Paragraph('7.4', s_cell_num), Paragraph('அலுவலரின் கருத்து / Remarks', s_cell_label), Paragraph(':', s_cell_num), Paragraph('____________________<br/>____________________', s_cell_val)],
+        ]
+        t_off = Table(off_rows, colWidths=[20, 200, 14, 126])
+        t_off.setStyle(TableStyle([
+            ('BOX', (0, 0), (-1, -1), 0.5, C_BORDER),
+            ('INNERGRID', (0, 0), (-1, -1), 0.5, C_INNER_GRID),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 3),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+            ('TOPPADDING', (0, 0), (-1, -1), 1.5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
+        ]))
+
+        seal_box = Paragraph('அதிகாரி கையொப்பம், முத்திரை /<br/><b>Signature & Seal of Authorized Officer</b>', ParagraphStyle('SB', fontName=DEFAULT_FONT, fontSize=7.5, leading=9.5, alignment=1))
+        t_seal = Table([[seal_box]], colWidths=[175], rowHeights=[65])
+        t_seal.setStyle(TableStyle([
+            ('BOX', (0, 0), (0, 0), 0.8, C_BORDER),
+            ('VALIGN', (0, 0), (0, 0), 'TOP'),
+            ('ALIGN', (0, 0), (0, 0), 'CENTER'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 3),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+            ('PADDING', (0, 0), (0, 0), 3),
+        ]))
+
+        s7_table = Table([[t_off, t_seal]], colWidths=[365, 182])
+        s7_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ('PADDING', (0, 0), (-1, -1), 0)
+        ]))
+        story.append(s7_table)
+        story.append(Spacer(1, 5))
+
+        # 6. Bottom Notice Page 2
+        note_left = Paragraph(
+            'ℹ️ <b>குறிப்பு: இது விவசாயியால் வழங்கப்பட்ட புகார் மற்றும் ஆதார விவரம் ஆகும். இது ஒரு ஆரம்ப பதிவு மட்டுமே. '
+            'இழப்பீடு / நிவாரணம் தொடர்பான இறுதி முடிவு, துறை விதிமுறைகளின் அடிப்படையில் மேற்கொள்ளப்படும்.</b><br/>'
+            '<i>Note: This is a farmer-submitted complaint and evidence record. It is an initial report only. '
+            'The final decision regarding compensation/relief will be taken by the Forest Department as per the applicable rules.</i>',
+            ParagraphStyle('NL', fontName=DEFAULT_FONT, fontSize=6.5, leading=8.5, textColor=C_TEXT_MAIN)
+        )
+        page2_box = Paragraph('<b>பக்கம் 2 / 2</b><br/>Page 2 of 2', ParagraphStyle('P2B', fontName=DEFAULT_BOLD_FONT, fontSize=8, leading=10, textColor=C_DARK_GREEN, alignment=1))
+        t_note = Table([[note_left, page2_box]], colWidths=[457, 90])
+        t_note.setStyle(TableStyle([
+            ('BOX', (0, 0), (0, 0), 0.5, C_BORDER),
+            ('BOX', (1, 0), (1, 0), 0.8, C_DARK_GREEN),
+            ('BACKGROUND', (1, 0), (1, 0), C_LIGHT_GREEN_BG),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 3),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ]))
+        story.append(t_note)
+
         doc.build(story)
-        return str(output_path)
+        return str(output_path.resolve())

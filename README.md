@@ -7,7 +7,7 @@
 [![Tests](https://img.shields.io/badge/Tests-17%2F17%20Passing-brightgreen.svg)](backend/tests)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**RaidProof AI** is a production-grade, voice-first evidence preparation platform built for smallholder Indian farmers affected by wildlife crop incursions (elephants, wild boars, gaurs). It combines **Gnani Prisma v3.0** (Tamil & English Speech-to-Text), **Gnani Timbre v3.0** (Text-to-Speech), an **Agricultural AI Extraction & Contradiction Engine**, geo-tagged camera evidence, and a single-page official **Bilingual PDF Evidence Dossier Generator** aligned with the Tamil Nadu Forest Department ex-gratia submission standards.
+**RaidProof AI** is a production-grade, voice-first evidence preparation platform built for smallholder Indian farmers affected by wildlife crop incursions (elephants, wild boars, gaurs). It combines **Gnani Prisma v3.0** (Tamil & English Speech-to-Text), **Gnani Timbre v3.0** (Text-to-Speech), an **Agricultural AI Extraction & Contradiction Engine**, geo-tagged camera evidence, and the official **2-Page Form WCD-01 (Citizen Report) PDF Complaint Generator** aligned with the Tamil Nadu Forest Department ex-gratia submission standards.
 
 ---
 
@@ -36,7 +36,7 @@ flowchart LR
 4. **Damage Photography & GPS**: Farmer captures field photographs with hardware GPS coordinates stamped automatically.
 5. **Structured Evidence Record**: The system stores tamper-evident evidence records with precise geographic provenance.
 6. **Farmer Review & Confirmation**: The farmer reviews all extracted details and signs a self-declaration statement.
-7. **Official PDF Dossier Generation**: Generates an authentic, single-page bilingual PDF dossier with embedded photos, ready for Forest Department inspection.
+7. **Official PDF Dossier Generation**: Generates an authentic, 2-page bilingual Form WCD-01 PDF dossier with embedded photos, satellite map pin, farmer declaration, and office use inspection block.
 
 ---
 
@@ -47,10 +47,12 @@ flowchart LR
 - **Gnani Timbre v3.0 TTS**: Delivers natural spoken confirmation back to the farmer in regional Tamil prosody (`ta-IN`, `voice=Kavitha`).
 - **Resilient Fallback**: Seamless fallback to offline speech simulation if network is degraded.
 
-### 2. Embedded Real Evidence Photographs in PDF
-- **Dual Photo Protocol**: Embeds **Wide-Angle damage view** and **Close-Up spoor/footprint** photos directly onto the PDF.
+### 2. Official Form WCD-01 (Citizen Report) 2-Page Departmental Format
+- **Strict Government Layout**:
+  - **Page 1**: State emblems, complaint metadata, **Section 1** (Farmer Details), **Section 2** (Land & Crop Particulars with stage checkboxes and estimated loss), **Section 3** (Incident Details with animal checkboxes and brief description), and Attached Evidences strip.
+  - **Page 2**: **Section 4** (Dual Photographic Evidence: damaged crop & camera capture with burned timestamps), **Section 5** (Location GPS Details & satellite map pin), **Section 6** (Farmer Declaration & signature), **Section 7** (For Office Use Only field inspection table & authorized officer seal box), and statutory citizen report notice.
 - **Hardware GPS Stamps**: Burns latitude, longitude, accuracy radius (±m), and capture timestamp onto every photo.
-- **Single-Page A4 Guarantee**: Formatted to fit strictly onto **1 page** with zero layout overflow.
+- **Authentic Assets Embedded**: Tamil Nadu state emblem, Forest Department tree/elephant emblem, satellite map snippet, and cultivator signature.
 
 ### 3. Tamil Nadu Government Relief Norms & Calculator (G.O. Ms. No. 42)
 - Official ex-gratia compensation schedule based on **G.O. Ms. No. 42 (Environment & Forests Department)**:

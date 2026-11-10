@@ -43,11 +43,14 @@ backend/.env
 *.db
 *.sqlite3
 storage/
-static/
+/static/
 backend/storage/
-backend/static/uploads/
-backend/static/dossiers/
-backend/static/audio/
+backend/static/uploads/*
+!backend/static/uploads/.gitkeep
+backend/static/dossiers/*
+!backend/static/dossiers/.gitkeep
+backend/static/audio/*
+!backend/static/audio/.gitkeep
 
 # OS Files
 .DS_Store

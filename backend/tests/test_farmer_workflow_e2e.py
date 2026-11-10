@@ -118,18 +118,16 @@ async def test_full_farmer_workflow_and_deduplication():
             pdf_content = pdf_resp.content
             assert len(pdf_content) > 1000
 
-            # Step 7: Parse PDF and inspect strict safety requirements
+            # Step 7: Parse PDF and inspect official Form WCD-01 format requirements
             import pypdf
             reader = pypdf.PdfReader(io.BytesIO(pdf_content))
-            assert len(reader.pages) == 1  # Fits cleanly on single A4 sheet
-            text = reader.pages[0].extract_text()
+            assert len(reader.pages) == 2  # Fits cleanly on official 2-page Form WCD-01
+            full_text = reader.pages[0].extract_text() + "\n" + reader.pages[1].extract_text()
             
-            # Verify required safety titles & disclaimers
-            assert "Self-Declared Wildlife Crop Damage Evidence Dossier — Not an Official Government Form" in text
-            assert "சுய சான்று அறிவிப்பு" in text
-            assert "அரசு ஆவணம் அல்ல" in text
-            assert "Forest Officer" not in text
-            assert "வனச்சரக அலுவலர்" not in text
-            assert "ஒப்புதல்" in text or "இருப்பிட தகவல்" in text
+            # Verify required official Form WCD-01 elements & citizen report disclaimers
+            assert "Form No.: WCD-01" in full_text
+            assert "Crop Damage by Wild Animals – Complaint and Evidence Form" in full_text
+            assert "For Office Use Only" in full_text
+            assert "விவசாயியால் வழங்கப்பட்ட புகார் மற்றும் ஆதார விவரம்" in full_text or "ஆரம்ப பதிவு" in full_text
     finally:
         settings.USE_MOCK_VOICE = orig_mock

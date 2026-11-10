@@ -36,16 +36,17 @@ All core layers—the asynchronous FastAPI backend, Gnani Prisma STT and Timbre 
 
 ---
 
-## 3. PDF Dossier Verification & Embedded Photography Audit
-- **Engine:** ReportLab 4.1 with Google `Noto Sans Tamil` OpenType fonts.
-- **Embedded Photographs:**
-  - Real wide-angle damage view (`elephant.jpg` / field context) and close-up spoor/footprint photos (`field.jpg`).
-  - GPS provenance coordinates, accuracy radius (±m), and capture timestamps burned into image captions.
-  - Verification via `pypdf`: `len(reader.pages) == 1` and `len(reader.pages[0].images) == 2`.
-- **Statutory Disclaimers:**
-  - Header: *"Self-Declared Wildlife Crop Damage Evidence Dossier — Not an Official Government Form"*
-  - Footer: *"சுய சான்று அறிவிப்பு: இது விவசாயியால் சுயமாக தெரிவிக்கப்பட்ட விவரங்களின் தொகுப்பு ஆகும். இழப்பீட்டுத் தொகையை இறுதி செய்தல் மற்றும் நேரடி கள ஆய்வு ஆகியவை துறை அதிகாரிகளின் அதிகார வரம்பிற்கு உட்பட்டது."*
-  - Zero fabricated officer signatures. Enforces cultivator signature and adjacent land witness blocks.
+## 3. Official Form WCD-01 Verification & Embedded Photography Audit
+- **Format:** Official 2-Page Form WCD-01 (Citizen Report) - Crop Damage by Wild Animals – Complaint and Evidence Form.
+- **Engine:** ReportLab 4.1 with Microsoft `Nirmala.ttc` OpenType Tamil fonts.
+- **Embedded Photographs & Visual Assets:**
+  - Page 1: Tamil Nadu State Emblem and Forest Department Emblem.
+  - Page 2: Damaged crop photo (with timestamp), elephant/wildlife camera capture (with timestamp), satellite map pin, and farmer signature.
+  - Verification via `pypdf`: `len(reader.pages) == 2`, `len(reader.pages[0].images) == 2`, `len(reader.pages[1].images) == 5`.
+- **Statutory Notice & Departmental Field Inspection:**
+  - Header: *"Government of Tamil Nadu – Forest Department / Form No.: WCD-01 (Citizen Report)"*
+  - Section 7: *"அலுவலர் பயன்பாட்டிற்கு மட்டும் / For Office Use Only"* with official inspection date, confirmed animal, remarks, and empty seal/signature box for field officer.
+  - Footer: *"குறிப்பு: இது விவசாயியால் வழங்கப்பட்ட புகார் மற்றும் ஆதார விவரம் ஆகும். இது ஒரு ஆரம்ப பதிவு மட்டுமே. இழப்பீடு / நிவாரணம் தொடர்பான இறுதி முடிவு, துறை விதிமுறைகளின் அடிப்படையில் மேற்கொள்ளப்படும்."*
 
 ---
 

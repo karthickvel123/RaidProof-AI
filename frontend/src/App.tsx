@@ -1499,10 +1499,20 @@ export function App() {
               {/* -------------------------------------------------------- */}
               {wizardStep === 4 && (
                 <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-5">
-                  <div className="pb-3 border-b border-slate-100">
-                    <h3 className="font-bold text-base text-slate-900">
-                      {isTa ? 'சான்றாவணம் முன்னோட்டம் (Evidence Dossier PDF Preview)' : 'Evidence Dossier (PDF Preview)'}
-                    </h3>
+                  <div className="pb-3 border-b border-slate-100 flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold text-base text-slate-900">
+                        {isTa ? 'அரசு படிவம் WCD-01 முன்னோட்டம் (Official Form WCD-01)' : 'Official Form WCD-01 (PDF Preview)'}
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {isTa
+                          ? 'வனவிலங்குகளால் ஏற்படுத்தப்பட்ட பயிர் சேதம் – புகார் மற்றும் ஆதாரவிவரம் (2 பக்கங்கள்)'
+                          : 'Crop Damage by Wild Animals – Complaint and Evidence Form (2 Pages)'}
+                      </p>
+                    </div>
+                    <span className="px-2.5 py-1 bg-emerald-100 text-emerald-900 font-bold text-[11px] rounded-lg border border-emerald-300">
+                      Form No.: WCD-01
+                    </span>
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
@@ -1510,8 +1520,8 @@ export function App() {
                     <div className="lg:col-span-8 rounded-2xl overflow-hidden border border-slate-300 shadow-sm bg-slate-800">
                       <div className="bg-[#323639] text-slate-300 px-3 py-1.5 flex items-center justify-between text-[11px] font-mono border-b border-slate-700 select-none">
                         <span className="flex items-center gap-2">
-                          <span className="w-2.5 h-2.5 bg-slate-500 rounded-sm"></span>
-                          <span>RaidProof_AI_Dossier.pdf (1 / 1)</span>
+                          <span className="w-2.5 h-2.5 bg-emerald-500 rounded-sm"></span>
+                          <span>Form_WCD-01_Crop_Damage_Report.pdf (2 Pages)</span>
                         </span>
                         <span className="text-slate-400">100%</span>
                         <a href={dossierPdfUrl} target="_blank" rel="noreferrer" title="Download">
@@ -1522,7 +1532,7 @@ export function App() {
                       <iframe
                         src={dossierPdfUrl}
                         title="Dossier PDF"
-                        className="w-full h-[420px] bg-white"
+                        className="w-full h-[520px] bg-white"
                       />
                     </div>
 

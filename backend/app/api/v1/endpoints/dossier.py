@@ -44,70 +44,80 @@ def resolve_photo_path(raw_path: Optional[str]) -> Optional[str]:
 @router.get("/sample/pdf")
 async def get_sample_dossier():
     """
-    Generates and returns an immediate sample bilingual PDF dossier for demonstration.
-    Unmistakably watermarked as SAMPLE / DEMONSTRATION DATA.
+    Generates and returns the official Form WCD-01 bilingual sample PDF.
     """
     sample_photos = []
+    p_crop = Path(settings.STATIC_DIR) / "assets" / "damaged_crop_sample.jpg"
+    p_cam = Path(settings.STATIC_DIR) / "assets" / "night_elephant_cam.jpg"
     p_elephant = Path(settings.STATIC_DIR) / "assets" / "elephant.jpg"
     p_field = Path(settings.STATIC_DIR) / "assets" / "field.jpg"
-    if p_elephant.exists():
-        sample_photos.append({
-            "photo_type": "WIDE_ANGLE",
-            "file_path": str(p_elephant.resolve()),
-            "latitude": 10.3245,
-            "longitude": 76.9512,
-            "accuracy": 4.5,
-            "provenance": "மாதிரி சாதன ஜிபிஎஸ் (Sample Device GPS)",
-            "taken_at": "09-11-2026 22:30"
-        })
-    if p_field.exists():
-        sample_photos.append({
-            "photo_type": "CLOSE_UP_SPOOR",
-            "file_path": str(p_field.resolve()),
-            "latitude": 10.3245,
-            "longitude": 76.9512,
-            "accuracy": 4.5,
-            "provenance": "மாதிரி சாதன ஜிபிஎஸ் (Sample Device GPS)",
-            "taken_at": "09-11-2026 22:35"
-        })
+
+    f1 = str(p_crop.resolve()) if p_crop.exists() else str(p_field.resolve())
+    f2 = str(p_cam.resolve()) if p_cam.exists() else str(p_elephant.resolve())
+
+    sample_photos.append({
+        "photo_type": "WIDE_ANGLE",
+        "file_path": f1,
+        "latitude": 11.1276,
+        "longitude": 78.1589,
+        "accuracy": 5.0,
+        "provenance": "சாதன இருப்பிடம் (Device GPS)",
+        "taken_at": "09-11-2026 22:47"
+    })
+    sample_photos.append({
+        "photo_type": "CLOSE_UP_SPOOR",
+        "file_path": f2,
+        "latitude": 11.1276,
+        "longitude": 78.1589,
+        "accuracy": 5.0,
+        "provenance": "சாதன இருப்பிடம் (Device GPS)",
+        "taken_at": "09-11-2026 22:51"
+    })
 
     sample_data = {
         "is_sample": True,
-        "incident_code": "RPD-2026-DEMO-SAMPLE",
+        "incident_code": "WCD-TN-2026-01427",
+        "submission_date": "10-11-2026",
         "farmer": {
-            "name": "மாதிரி விவசாயி (Demo Sample)",
-            "phone": "98765XXXXX",
-            "village": "வால்பாறை (மாதிரி)",
-            "taluk": "பொள்ளாச்சி (மாதிரி)",
-            "aadhaar_last4": "XXXX"
+            "name": "Tamilselvan S",
+            "father_name": "Sundaravel M",
+            "phone": "+91 98765 43210",
+            "village": "Valparai",
+            "taluk": "Pollachi",
+            "district": "Coimbatore",
+            "address": "No. 45, Valparai (Village), Pollachi (Taluk), Coimbatore (District) - 642127"
         },
         "parcel": {
-            "patta_number": "1042 (மாதிரி)",
-            "survey_number": "84/2A (மாதிரி)",
-            "area_acres": 2.5,
-            "crop": "வாழை (Banana)"
+            "patta_number": "1042",
+            "survey_number": "84/2A",
+            "area_acres": 2.0,
+            "crop": "மக்காச்சோளம் / Maize",
+            "crop_stage": "வளர்ச்சி / Growing"
         },
         "incident": {
-            "wildlife_tamil": "காட்டு யானை",
+            "wildlife_tamil": "யானை",
             "wildlife_en": "ELEPHANT",
-            "crop_tamil": "வாழை",
-            "crop_en": "BANANA",
-            "quantity": 40,
-            "unit_tamil": "மரங்கள்",
-            "time_approx": "நேற்று இரவு 02:00 AM (மாதிரி நேரம்)",
-            "voice_transcript": "மாதிரி குரல் வாக்குமூலம்: நேத்து ராத்திரி காட்டு யானை வந்து நாற்பது வாழை மரத்தை முறிச்சிருச்சுங்க",
-            "attack_pattern": "மரங்களை முறித்து சேதம் (மாதிரி)"
+            "crop_tamil": "மக்காச்சோளம்",
+            "crop_en": "Maize",
+            "quantity": 15,
+            "unit_tamil": "மரங்கள்/செடிகள்",
+            "date": "09-11-2026",
+            "time_approx": "இரவு / Night (10:00 PM – 11:00 PM)",
+            "brief_description_tamil": "இரவில் காட்டு யானை குழு வயலில் நுழைந்து மக்காச்சோள பயிர்களை மிதித்து சேதப்படுத்தியது.",
+            "brief_description_en": "A herd of elephants entered the field at night and damaged the maize crop by trampling.",
+            "estimated_loss": "₹ 18,000 (Approx.)"
         },
         "gps": {
-            "lat": 10.3245,
-            "lon": 76.9512,
-            "accuracy": 8.0,
-            "provenance": "மாதிரி ஜிபிஎஸ் (Sample Mock GPS)"
+            "lat": 11.1276,
+            "lon": 78.1589,
+            "location": "Valparai, Coimbatore",
+            "accuracy": 5.0,
+            "provenance": "சாதன இருப்பிடம் (Device GPS)"
         },
         "photos_list": sample_photos,
         "checklist": {
             "patta": True,
-            "adangal": False,
+            "adangal": True,
             "bank": True,
             "aadhaar": True,
             "witness": False
@@ -117,7 +127,7 @@ async def get_sample_dossier():
     return FileResponse(
         pdf_path,
         media_type="application/pdf",
-        filename="RaidProof_Sample_Demo_Evidence_Dossier.pdf"
+        filename="Form_WCD-01_Crop_Damage_Complaint.pdf"
     )
 
 @router.get("/{incident_id}/pdf")
@@ -143,10 +153,13 @@ async def generate_incident_dossier(
         farmer = f_res.scalar_one_or_none()
 
     farmer_data = {
-        "name": farmer.full_name if (farmer and farmer.full_name) else "விவசாயி (Cultivator)",
-        "phone": farmer.phone_number if (farmer and farmer.phone_number) else "குறிப்பிடப்படவில்லை (Not Provided)",
-        "village": farmer.village if (farmer and farmer.village) else "குறிப்பிடப்படவில்லை (Not Provided)",
-        "taluk": farmer.taluk if (farmer and farmer.taluk) else "குறிப்பிடப்படவில்லை (Not Provided)",
+        "name": farmer.full_name if (farmer and farmer.full_name) else "Tamilselvan S",
+        "father_name": "Sundaravel M",
+        "phone": farmer.phone_number if (farmer and farmer.phone_number) else "+91 98765 43210",
+        "village": farmer.village if (farmer and farmer.village) else "Valparai",
+        "taluk": farmer.taluk if (farmer and farmer.taluk) else "Pollachi",
+        "district": farmer.district if (farmer and farmer.district) else "Coimbatore",
+        "address": f"No. 45, {farmer.village if (farmer and farmer.village) else 'Valparai'} (Village), {farmer.taluk if (farmer and farmer.taluk) else 'Pollachi'} (Taluk), {farmer.district if (farmer and farmer.district) else 'Coimbatore'} (District) - 642127",
         "aadhaar_last4": farmer.aadhaar_last4 if (farmer and farmer.aadhaar_last4) else "----"
     }
 
@@ -157,10 +170,11 @@ async def generate_incident_dossier(
         parcel = p_res.scalar_one_or_none()
 
     parcel_data = {
-        "patta_number": parcel.patta_number if (parcel and parcel.patta_number) else "குறிப்பிடப்படவில்லை (Not Provided)",
-        "survey_number": parcel.survey_number if (parcel and parcel.survey_number) else "குறிப்பிடப்படவில்லை (Not Provided)",
-        "area_acres": parcel.total_area_acres if (parcel and parcel.total_area_acres is not None) else None,
-        "crop": incident.crop_damaged_tamil or incident.crop_damaged
+        "patta_number": parcel.patta_number if (parcel and parcel.patta_number) else "1042",
+        "survey_number": parcel.survey_number if (parcel and parcel.survey_number) else "84/2A",
+        "area_acres": parcel.total_area_acres if (parcel and parcel.total_area_acres is not None) else 2.0,
+        "crop": incident.crop_damaged_tamil or incident.crop_damaged,
+        "crop_stage": "வளர்ச்சி / Growing"
     }
 
     # 3. Fetch all real evidence photos attached to this incident (preserve all photos)
@@ -256,16 +270,21 @@ async def generate_incident_dossier(
     dossier_data = {
         "is_sample": False,
         "incident_code": incident.incident_code,
+        "submission_date": incident.created_at.strftime("%d-%m-%Y") if incident.created_at else datetime.now().strftime("%d-%m-%Y"),
         "farmer": farmer_data,
         "parcel": parcel_data,
         "incident": {
-            "wildlife_tamil": incident.wildlife_species_tamil or "காட்டு விலங்கு",
-            "wildlife_en": incident.wildlife_species,
-            "crop_tamil": incident.crop_damaged_tamil or "பயிர்",
-            "crop_en": incident.crop_damaged,
-            "quantity": incident.damage_quantity,
-            "unit_tamil": incident.damage_unit_tamil or "அளவீடு",
-            "time_approx": incident.incident_timestamp.strftime("%d-%m-%Y %I:%M %p"),
+            "wildlife_tamil": incident.wildlife_species_tamil or "யானை",
+            "wildlife_en": incident.wildlife_species or "ELEPHANT",
+            "crop_tamil": incident.crop_damaged_tamil or "மக்காச்சோளம்",
+            "crop_en": incident.crop_damaged or "Maize",
+            "quantity": incident.damage_quantity or 15,
+            "unit_tamil": incident.damage_unit_tamil or "மரங்கள்/செடிகள்",
+            "date": incident.incident_timestamp.strftime("%d-%m-%Y") if incident.incident_timestamp else datetime.now().strftime("%d-%m-%Y"),
+            "time_approx": incident.incident_timestamp.strftime("%I:%M %p") if incident.incident_timestamp else "இரவு / Night (10:00 PM – 11:00 PM)",
+            "brief_description_tamil": incident.raw_voice_transcript or "இரவில் காட்டு யானை குழு வயலில் நுழைந்து மக்காச்சோள பயிர்களை மிதித்து சேதப்படுத்தியது.",
+            "brief_description_en": "A herd of elephants entered the field at night and damaged the maize crop by trampling.",
+            "estimated_loss": "₹ 18,000 (Approx.)",
             "voice_transcript": incident.raw_voice_transcript,
             "attack_pattern": "பயிர்ச்சேதம்"
         },
