@@ -22,6 +22,9 @@ class IncidentReport(Base):
 
     incident_timestamp = Column(DateTime, nullable=False)
     raw_voice_transcript = Column(Text, nullable=False)
+    consent_latitude = Column(Float, nullable=True)
+    consent_longitude = Column(Float, nullable=True)
+    consent_gps_accuracy = Column(Float, nullable=True)
     status = Column(String(30), default="DRAFT")           # DRAFT, VALIDATED, DOSSIER_READY
     pdf_dossier_path = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

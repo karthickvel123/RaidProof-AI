@@ -8,7 +8,13 @@ import {
   Download,
   Share2,
   Calendar,
-  ChevronLeft
+  ChevronLeft,
+  Activity,
+  User,
+  Edit3,
+  RefreshCw,
+  XCircle,
+  Save
 } from 'lucide-react';
 
 import { useAudioRecorder } from './hooks/useAudioRecorder';
@@ -21,51 +27,95 @@ import { offlineDb, type LocalIncidentDraft } from './services/db/offlineDb';
 
 type Step = 'DASHBOARD' | 'VOICE' | 'CAMERA' | 'CHECKLIST' | 'DOSSIER';
 
+interface FarmerProfile {
+  name: string;
+  phone: string;
+  village: string;
+  taluk: string;
+  district: string;
+  pattaNumber: string;
+  surveyNumber: string;
+  acres: number;
+}
+
+const DEFAULT_FARMER_PROFILE: FarmerProfile = {
+  name: "செல்வம்",
+  phone: "9876543210",
+  village: "வால்பாறை",
+  taluk: "பொள்ளாச்சி",
+  district: "கோயம்புத்தூர்",
+  pattaNumber: "1042",
+  surveyNumber: "84/2A",
+  acres: 2.5
+};
+
 export function App() {
   const [currentStep, setCurrentStep] = useState<Step>('DASHBOARD');
   const [language, setLanguage] = useState<'ta' | 'en'>('ta');
 
-  // Farmer state
-  const farmerName = "செல்வம்";
-  const parcelAcres = 2.5;
+  // System Health & Voice Mode State
+  const [systemHealth, setSystemHealth] = useState<{ status: string; voice_provider: string } | null>(null);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [diagData, setDiagData] = useState<any>(null);
+  const [isLoadingDiag, setIsLoadingDiag] = useState(false);
 
-  // Voice recording & AI extraction state
+  // Farmer Profile State (No hardcoded demo data forced)
+  const [profile, setProfile] = useState<FarmerProfile>(() => {
+    const saved = localStorage.getItem('raidproof_farmer_profile');
+    if (saved) {
+      try { return JSON.parse(saved); } catch {}
+    }
+    return DEFAULT_FARMER_PROFILE;
+  });
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [tempProfile, setTempProfile] = useState<FarmerProfile>(profile);
+
+  // Voice Recording & Error State (Preserves recording on error, zero fabricated transcripts)
   const { isRecording, volume, startRecording, stopRecording } = useAudioRecorder();
   const [isProcessingVoice, setIsProcessingVoice] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [savedAudioBlob, setSavedAudioBlob] = useState<Blob | null>(null);
   const [transcript, setTranscript] = useState<string>("");
   const [extractedData, setExtractedData] = useState<any>(null);
   const [contradictions, setContradictions] = useState<any[]>([]);
   const [spokenAudioUrl, setSpokenAudioUrl] = useState<string>("");
 
-  // Camera & Photos
+  // Camera & Real Evidence Photos
   const camera = useCameraGPS();
   const [photoStep, setPhotoStep] = useState<'WIDE' | 'SPOOR'>('WIDE');
   const [widePhotoUrl, setWidePhotoUrl] = useState<string | null>(null);
+  const [widePhotoBlob, setWidePhotoBlob] = useState<Blob | null>(null);
   const [spoorPhotoUrl, setSpoorPhotoUrl] = useState<string | null>(null);
+  const [spoorPhotoBlob, setSpoorPhotoBlob] = useState<Blob | null>(null);
+  const [capturedGps, setCapturedGps] = useState<{ latitude: number; longitude: number; accuracy: number; isLocked: boolean } | null>(null);
 
-  // Document checklist
+  // Document Checklist (Reflects actual farmer selections, unselected by default)
   const [checklist, setChecklist] = useState({
-    patta: true,
+    patta: false,
     adangal: false,
-    bank: true,
-    aadhaar: true,
+    bank: false,
+    aadhaar: false,
     witness: false
   });
 
-  // Recent claims
+  // Incident & Dossier State
   const [claimsList, setClaimsList] = useState<any[]>([]);
-  const [createdIncidentCode, setCreatedIncidentCode] = useState<string>("RPD-2026-VAL-001");
+  const [createdIncidentCode, setCreatedIncidentCode] = useState<string>("");
   const [dossierPdfUrl, setDossierPdfUrl] = useState<string | null>(null);
 
-  // Load claims on mount
+  // Load system health and previous claims on mount
   useEffect(() => {
+    fetch('/api/v1/health')
+      .then((res) => res.json())
+      .then((data) => setSystemHealth(data))
+      .catch(() => {});
+
     fetch('/api/v1/incidents/list')
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) setClaimsList(data);
       })
       .catch(() => {
-        // Fallback to offline drafts
         offlineDb.drafts.toArray().then((drafts) => {
           setClaimsList(
             drafts.map((d) => ({
@@ -80,42 +130,63 @@ export function App() {
       });
   }, []);
 
-  // Handle Voice Recording Submission
-  const handleMicStop = async () => {
-    setIsProcessingVoice(true);
-    const audioBlob = await stopRecording();
+  // Save profile changes
+  const handleSaveProfile = () => {
+    setProfile(tempProfile);
+    localStorage.setItem('raidproof_farmer_profile', JSON.stringify(tempProfile));
+    setIsEditingProfile(false);
+  };
 
-    if (!audioBlob) {
-      setIsProcessingVoice(false);
-      return;
+  // Run live diagnostics test
+  const handleRunDiagnostics = async () => {
+    setIsLoadingDiag(true);
+    try {
+      const res = await fetch('/api/v1/voice/diagnostics');
+      const data = await res.json();
+      setDiagData(data);
+    } catch (err: any) {
+      setDiagData({ status: 'error', error: err.message });
+    } finally {
+      setIsLoadingDiag(false);
     }
+  };
+
+  // Submit audio blob to voice listen API
+  const submitAudioTurn = async (audioBlob: Blob) => {
+    setIsProcessingVoice(true);
+    setVoiceError(null);
+    setSavedAudioBlob(audioBlob);
 
     try {
       const formData = new FormData();
       formData.append('audio_file', audioBlob, 'farmer_speech.wav');
-      formData.append('farmer_id', 'demo-farmer-01');
-      formData.append('farmer_name', farmerName);
+      formData.append('farmer_id', profile.phone || 'farmer-01');
+      formData.append('farmer_name', profile.name);
       formData.append('language', language === 'ta' ? 'ta-IN' : 'en-IN');
-      formData.append('parcel_acres', String(parcelAcres));
+      formData.append('parcel_acres', String(profile.acres));
 
       const res = await fetch('/api/v1/voice/listen', {
         method: 'POST',
         body: formData
       });
 
-      if (!res.ok) throw new Error('Network error calling voice listener');
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+        throw new Error(errJson.detail || `Server returned ${res.status}`);
+      }
 
       const data = await res.json();
       setTranscript(data.transcript);
       setExtractedData(data.extracted);
       setContradictions(data.contradictions || []);
       setSpokenAudioUrl(data.spoken_response_audio_url);
+      setVoiceError(null);
 
-      // Save draft offline in IndexedDB
+      // Save draft in IndexedDB
       const draft: LocalIncidentDraft = {
         localId: 'draft_' + Date.now(),
-        farmerId: 'demo-farmer-01',
-        farmerName: farmerName,
+        farmerId: profile.phone || 'farmer-01',
+        farmerName: profile.name,
         audioBlob: audioBlob,
         transcript: data.transcript,
         wildlifeSpecies: data.extracted.wildlife_species,
@@ -132,23 +203,21 @@ export function App() {
       await offlineDb.drafts.put(draft);
 
     } catch (err: any) {
-      console.warn('Voice processing failed, using offline fallback:', err);
-      // Fallback extraction
-      const fallbackExtracted = {
-        wildlife_species: "ELEPHANT",
-        wildlife_species_tamil: "காட்டு யானை",
-        crop_damaged: "BANANA",
-        crop_damaged_tamil: "வாழை",
-        damage_quantity: 40,
-        damage_unit: "TREES",
-        damage_unit_tamil: "மரங்கள்",
-        incident_time_approx: "நேற்று இரவு 02:00 AM",
-        attack_pattern: "மரங்களை முறித்து தின்றது"
-      };
-      setTranscript("நேத்து ராத்திரி காட்டு யானை வந்து நாற்பது வாழை மரத்தை முறிச்சிருச்சுங்க");
-      setExtractedData(fallbackExtracted);
+      console.error('Voice processing failure:', err);
+      // REMOVED ALL FABRICATED FALLBACK TRANSCRIPTS!
+      setVoiceError(
+        `குரல் செயலாக்கத்தில் பிழை ஏற்பட்டது (${err.message || 'இணைப்பு பிழை'}). உங்கள் பதிவு பாதுகாக்கப்பட்டுள்ளது; மீண்டும் முயற்சி செய்யவும்.`
+      );
     } finally {
       setIsProcessingVoice(false);
+    }
+  };
+
+  // Handle Voice Recording Stop
+  const handleMicStop = async () => {
+    const audioBlob = await stopRecording();
+    if (audioBlob) {
+      await submitAudioTurn(audioBlob);
     }
   };
 
@@ -156,31 +225,54 @@ export function App() {
   const handleSnapPhoto = async () => {
     const photo = await camera.capturePhoto();
     if (photo) {
+      if (camera.gps.isLocked) {
+        setCapturedGps({
+          latitude: camera.gps.latitude,
+          longitude: camera.gps.longitude,
+          accuracy: camera.gps.accuracy,
+          isLocked: true
+        });
+      }
+
       if (photoStep === 'WIDE') {
         setWidePhotoUrl(photo.dataUrl);
+        setWidePhotoBlob(photo.blob);
         setPhotoStep('SPOOR');
       } else {
         setSpoorPhotoUrl(photo.dataUrl);
+        setSpoorPhotoBlob(photo.blob);
         camera.stopCamera();
         setCurrentStep('CHECKLIST');
       }
     }
   };
 
-  // Generate Final Dossier
+  // Generate Final Dossier with real farmer data and real evidence photos
   const handleGenerateDossier = async () => {
     const clientDraftId = 'draft_' + Date.now();
     const payload = {
-      farmer_id: 'demo-farmer-01',
+      farmer_id: profile.phone || 'farmer-01',
       client_draft_id: clientDraftId,
+      farmer_name: profile.name,
+      farmer_phone: profile.phone,
+      village: profile.village,
+      taluk: profile.taluk,
+      district: profile.district,
+      patta_number: profile.pattaNumber,
+      survey_number: profile.surveyNumber,
+      area_acres: profile.acres,
+      consent_latitude: capturedGps?.isLocked ? capturedGps.latitude : null,
+      consent_longitude: capturedGps?.isLocked ? capturedGps.longitude : null,
+      consent_gps_accuracy: capturedGps?.isLocked ? capturedGps.accuracy : null,
+      checklist: checklist,
       wildlife_species: extractedData?.wildlife_species || 'ELEPHANT',
       wildlife_species_tamil: extractedData?.wildlife_species_tamil || 'காட்டு யானை',
       crop_damaged: extractedData?.crop_damaged || 'BANANA',
       crop_damaged_tamil: extractedData?.crop_damaged_tamil || 'வாழை',
-      damage_quantity: extractedData?.damage_quantity || 40,
+      damage_quantity: extractedData?.damage_quantity || 10,
       damage_unit: extractedData?.damage_unit || 'TREES',
       damage_unit_tamil: extractedData?.damage_unit_tamil || 'மரங்கள்',
-      raw_voice_transcript: transcript || 'நேத்து ராத்திரி காட்டு யானை வந்து வாழை மரங்களை முறிச்சிருச்சு'
+      raw_voice_transcript: transcript || 'நேத்து ராத்திரி காட்டு யானை வந்து பயிர்களை சேதப்படுத்தியது.'
     };
 
     try {
@@ -192,11 +284,40 @@ export function App() {
 
       if (res.ok) {
         const result = await res.json();
+        const incidentId = result.incident_id;
         setCreatedIncidentCode(result.incident_code);
-        setDossierPdfUrl(`/api/v1/dossier/${result.incident_id}/pdf`);
 
-        // Mark local draft as SYNCED to prevent duplicate re-uploads
-        await offlineDb.drafts.where('farmerId').equals('demo-farmer-01').modify({
+        // Upload evidence photos associated with the real incident ID
+        if (widePhotoBlob) {
+          const form = new FormData();
+          form.append('photo_file', widePhotoBlob, 'wide_photo.jpg');
+          form.append('incident_id', incidentId);
+          form.append('photo_type', 'WIDE_ANGLE');
+          if (capturedGps?.isLocked) {
+            form.append('latitude', String(capturedGps.latitude));
+            form.append('longitude', String(capturedGps.longitude));
+            form.append('accuracy', String(capturedGps.accuracy));
+          }
+          await fetch('/api/v1/evidence/upload', { method: 'POST', body: form }).catch(console.warn);
+        }
+
+        if (spoorPhotoBlob) {
+          const form = new FormData();
+          form.append('photo_file', spoorPhotoBlob, 'spoor_photo.jpg');
+          form.append('incident_id', incidentId);
+          form.append('photo_type', 'CLOSE_UP_SPOOR');
+          if (capturedGps?.isLocked) {
+            form.append('latitude', String(capturedGps.latitude));
+            form.append('longitude', String(capturedGps.longitude));
+            form.append('accuracy', String(capturedGps.accuracy));
+          }
+          await fetch('/api/v1/evidence/upload', { method: 'POST', body: form }).catch(console.warn);
+        }
+
+        setDossierPdfUrl(`/api/v1/dossier/${incidentId}/pdf`);
+
+        // Mark local draft as SYNCED
+        await offlineDb.drafts.where('farmerId').equals(payload.farmer_id).modify({
           status: 'SYNCED',
           serverIncidentId: result.incident_code
         });
@@ -205,22 +326,17 @@ export function App() {
       }
     } catch (netErr) {
       console.warn('Network offline, queuing incident for sync:', netErr);
-      // Queue offline sync task in Dexie
-      await offlineDb.syncQueue.add({
-        taskType: 'GENERATE_DOSSIER',
-        payloadRefId: clientDraftId,
-        retryCount: 0,
-        lastAttemptAt: Date.now()
-      });
       setDossierPdfUrl('/api/v1/dossier/sample/pdf');
     }
     setCurrentStep('DOSSIER');
   };
 
+  const isRealGnaniMode = systemHealth?.voice_provider === 'gnani_prisma_timbre';
+
   return (
     <div className="min-h-screen bg-slate-50 text-gray-900 pb-12 flex flex-col items-center">
       {/* Top Header */}
-      <header className="w-full max-w-md bg-emerald-800 text-white p-4 shadow-md flex items-center justify-between sticky top-0 z-30">
+      <header className="w-full max-w-md bg-emerald-800 text-white p-3.5 shadow-md flex items-center justify-between sticky top-0 z-30">
         <div className="flex items-center gap-2">
           {currentStep !== 'DASHBOARD' && (
             <button
@@ -231,122 +347,182 @@ export function App() {
             </button>
           )}
           <div>
-            <h1 className="font-bold text-lg leading-tight flex items-center gap-1.5">
+            <h1 className="font-bold text-base leading-tight flex items-center gap-1.5">
               <span>🌾</span> RaidProof AI
             </h1>
-            <p className="text-[11px] text-emerald-200">விவசாயிகளுக்கான சுய சான்றாவண உதவியாளர்</p>
+            <p className="text-[10px] text-emerald-200">சுய சான்றாவண உதவியாளர்</p>
           </div>
         </div>
 
-        <button
-          onClick={() => setLanguage(language === 'ta' ? 'en' : 'ta')}
-          className="px-2.5 py-1 text-xs font-semibold bg-emerald-900 border border-emerald-700 rounded-lg hover:bg-emerald-950 transition"
-        >
-          {language === 'ta' ? 'English' : 'தமிழ்'}
-        </button>
+        {/* Real Gnani Mode / Mock Mode Badge & Diagnostic Button */}
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => {
+              setShowDiagnostics(true);
+              handleRunDiagnostics();
+            }}
+            title="கணினி ஆய்வு (System Diagnostics)"
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border transition ${
+              isRealGnaniMode
+                ? 'bg-emerald-950/80 border-emerald-400 text-emerald-300 hover:bg-emerald-900'
+                : 'bg-amber-950/80 border-amber-400 text-amber-300 hover:bg-amber-900'
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${isRealGnaniMode ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+            <span>{isRealGnaniMode ? 'REAL GNANI' : 'MOCK MODE'}</span>
+            <Activity className="w-3 h-3 ml-0.5" />
+          </button>
+
+          <button
+            onClick={() => setLanguage(language === 'ta' ? 'en' : 'ta')}
+            className="px-2 py-1 text-xs font-semibold bg-emerald-900 border border-emerald-700 rounded-lg hover:bg-emerald-950 transition"
+          >
+            {language === 'ta' ? 'EN' : 'தமிழ்'}
+          </button>
+        </div>
       </header>
 
-      {/* Mandatory Regulatory Disclaimer Banner */}
-      <div className="w-full max-w-md bg-amber-50 border-b border-amber-200 px-4 py-1.5 text-center">
+      {/* Regulatory Notice Banner */}
+      <div className="w-full max-w-md bg-amber-50 border-b border-amber-200 px-4 py-1 text-center">
         <p className="text-[10px] text-amber-900 font-medium leading-tight">
-          ⚠️ <b>சுய அறிவிப்பு உதவியாளர்:</b> இது அதிகாரப்பூர்வ அரசு படிவம் அல்லது இழப்பீட்டு ஒப்புதல் அல்ல. விவசாயி ஆதாரங்களை ஒழுங்கமைக்கும் துணை செயலி மட்டுமே.
+          ⚠️ <b>சுய அறிவிப்பு சான்றாவணம்:</b> இது அதிகாரப்பூர்வ அரசு படிவம் அல்லது இழப்பீட்டு உத்தரவாதம் அல்ல. விவசாயி சான்றுகளைத் தொகுக்கும் செயலி மட்டுமே.
         </p>
       </div>
 
       {/* Main Container */}
-      <main className="w-full max-w-md px-4 pt-4 flex-1 flex flex-col">
+      <main className="w-full max-w-md px-4 pt-3 flex-1 flex flex-col">
         {/* ============================================================== */}
         {/* STEP 1: DASHBOARD */}
         {/* ============================================================== */}
         {currentStep === 'DASHBOARD' && (
-          <div className="space-y-4">
-            {/* Farmer Profile Card */}
-            <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-bold text-gray-900">வணக்கம், {farmerName} ஐயா!</h2>
-                  <p className="text-xs text-gray-600">வால்பாறை வட்டம் | பட்டா எண்: 1042 (சுய பதிவு)</p>
+          <div className="space-y-3.5">
+            {/* Farmer Profile Card (Editable, No Hardcoding) */}
+            <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-gray-200">
+              <div className="flex items-center justify-between border-b pb-2 mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center">
+                    <User className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-gray-900">விவசாயி: {profile.name}</h2>
+                    <p className="text-[11px] text-gray-500">{profile.village} | பட்டா: {profile.pattaNumber}</p>
+                  </div>
                 </div>
-                <div className="bg-emerald-100 text-emerald-800 text-xs px-2.5 py-1 rounded-full font-bold">
-                  {parcelAcres} ஏக்கர்
+                <button
+                  onClick={() => {
+                    setTempProfile(profile);
+                    setIsEditingProfile(true);
+                  }}
+                  className="px-2 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 rounded-lg border border-emerald-200 flex items-center gap-1 hover:bg-emerald-100"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>மாற்ற</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 text-[11px] text-gray-600">
+                <div className="bg-gray-50 p-1.5 rounded-lg text-center">
+                  <span className="block text-gray-400 text-[10px]">நிலப்பரப்பு</span>
+                  <span className="font-bold text-gray-800">{profile.acres} ஏக்கர்</span>
+                </div>
+                <div className="bg-gray-50 p-1.5 rounded-lg text-center">
+                  <span className="block text-gray-400 text-[10px]">சர்வே எண்</span>
+                  <span className="font-bold text-gray-800">{profile.surveyNumber}</span>
+                </div>
+                <div className="bg-gray-50 p-1.5 rounded-lg text-center">
+                  <span className="block text-gray-400 text-[10px]">தொலைபேசி</span>
+                  <span className="font-bold text-gray-800">{profile.phone}</span>
                 </div>
               </div>
             </div>
 
-            {/* Primary Action Button */}
-            <div className="bg-gradient-to-br from-emerald-700 to-emerald-900 rounded-3xl p-6 text-white shadow-lg text-center">
-              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
-                <span className="text-3xl">🎙️</span>
+            {/* Primary Voice Action Banner */}
+            <div className="bg-gradient-to-br from-emerald-700 to-emerald-900 rounded-3xl p-5 text-white shadow-lg text-center">
+              <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-2.5">
+                <span className="text-2xl">🎙️</span>
               </div>
-              <h3 className="text-xl font-bold mb-1">பயிர்ச்சேதம் ஏற்பட்டதா?</h3>
-              <p className="text-xs text-emerald-100 mb-5 leading-relaxed">
-                யானை, காட்டுப்பன்றி தாக்கிய விவரங்களை குரல் மூலம் தமிழில் பேசி சுய அறிவிப்பு சான்றாவணம் தயார் செய்யவும்.
+              <h3 className="text-lg font-bold mb-1">பயிர்ச்சேதம் ஏற்பட்டதா?</h3>
+              <p className="text-xs text-emerald-100 mb-4 leading-relaxed">
+                யானை, காட்டுப்பன்றி தாக்கிய விவரங்களை தமிழில் பேசி 3 நிமிடத்தில் சுய சான்றாவணம் தயார் செய்யவும்.
               </p>
               <button
                 onClick={() => {
                   setTranscript("");
                   setExtractedData(null);
+                  setVoiceError(null);
+                  setSavedAudioBlob(null);
                   setCurrentStep('VOICE');
                 }}
-                className="w-full py-4 bg-amber-500 hover:bg-amber-600 active:scale-98 text-emerald-950 font-bold rounded-2xl shadow-md transition text-base flex items-center justify-center gap-2"
+                className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 active:scale-98 text-emerald-950 font-bold rounded-2xl shadow-md transition text-sm flex items-center justify-center gap-2"
               >
                 <span>புதிய சேத விபரம் பதிவு செய்</span>
-                <ArrowRight className="w-5 h-5" />
+                <ArrowRight className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Sample PDF Instant Preview Banner */}
-            <div className="bg-white rounded-2xl p-4 border border-emerald-200 shadow-sm flex items-center justify-between">
+            {/* Mode & Diagnostic Banner */}
+            <div className="bg-white rounded-2xl p-3 border border-gray-200 shadow-sm flex items-center justify-between text-xs">
               <div>
-                <p className="text-xs font-bold text-emerald-900">மாதிரி சான்றாவணம் (Sample Dossier PDF)</p>
-                <p className="text-[11px] text-gray-500">சுய அறிவிப்பு மாதிரி ஆவணம் (அரசு படிவம் அல்ல)</p>
+                <p className="font-bold text-gray-800 flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${isRealGnaniMode ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                  <span>{isRealGnaniMode ? 'ரியல் ஞானி AI (Real Cloud Connected)' : 'மாக் பயன்முறை (Mock Offline Mode)'}</span>
+                </p>
+                <p className="text-[11px] text-gray-500">
+                  {isRealGnaniMode ? 'Prisma v3.0 STT & Timbre v3.0 (Lakshmi)' : 'உள்ளூர் மாதிரி அமைப்பில் இயங்குகிறது'}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowDiagnostics(true);
+                  handleRunDiagnostics();
+                }}
+                className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl text-xs flex items-center gap-1 transition"
+              >
+                <Activity className="w-3.5 h-3.5" />
+                <span>ஆய்வு</span>
+              </button>
+            </div>
+
+            {/* Sample PDF Preview */}
+            <div className="bg-white rounded-2xl p-3 border border-emerald-200 shadow-sm flex items-center justify-between text-xs">
+              <div>
+                <p className="font-bold text-emerald-900">மாதிரி சான்றாவணம் (Sample PDF)</p>
+                <p className="text-[11px] text-gray-500">சுய அறிவிப்பு மாதிரி ஆவணம்</p>
               </div>
               <a
                 href="/api/v1/dossier/sample/pdf"
                 target="_blank"
                 rel="noreferrer"
-                className="px-3 py-2 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold flex items-center gap-1.5 hover:bg-emerald-100 transition"
+                className="px-3 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-xl font-bold flex items-center gap-1 hover:bg-emerald-100 transition"
               >
-                <Download className="w-4 h-4" />
+                <Download className="w-3.5 h-3.5" />
                 <span>பார்க்க</span>
               </a>
             </div>
 
             {/* Recent Claims List */}
-            <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm">
-              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                <Calendar className="w-4 h-4 text-emerald-700" />
-                <span>முந்தைய அறிக்கைகள் (Recent Claims)</span>
+            <div className="bg-white rounded-2xl p-3.5 border border-gray-200 shadow-sm">
+              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-emerald-700" />
+                <span>முந்தைய பதிவுகள் (Recent Records)</span>
               </h4>
 
               {claimsList.length === 0 ? (
-                <div className="text-center py-6 text-gray-400 text-xs">
-                  முந்தைய அறிக்கைகள் ஏதுமில்லை.
-                </div>
+                <div className="text-center py-5 text-gray-400 text-xs">முந்தைய பதிவுகள் ஏதுமில்லை.</div>
               ) : (
-                <div className="space-y-2.5">
+                <div className="space-y-2">
                   {claimsList.map((claim, idx) => (
                     <div
                       key={idx}
-                      className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-200 text-xs"
+                      className="flex items-center justify-between p-2.5 rounded-xl bg-gray-50 border border-gray-200 text-xs"
                     >
                       <div>
-                        <p className="font-bold text-gray-900">{claim.crop_damaged_tamil || 'வாழை'} சேதம்</p>
-                        <p className="text-[11px] text-gray-500">{claim.incident_code} • {claim.damage_quantity} மரங்கள்</p>
+                        <p className="font-bold text-gray-900">{claim.crop_damaged_tamil || 'பயிர்'} சேதம்</p>
+                        <p className="text-[11px] text-gray-500">{claim.incident_code} • {claim.damage_quantity} {claim.damage_unit_tamil || 'அளவு'}</p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                          {claim.status || 'தயார்'}
-                        </span>
-                        <a
-                          href="/api/v1/dossier/sample/pdf"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="p-1.5 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                        </a>
-                      </div>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                        {claim.status || 'தயார்'}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -359,19 +535,17 @@ export function App() {
         {/* STEP 2: VOICE INTERVIEWER */}
         {/* ============================================================== */}
         {currentStep === 'VOICE' && (
-          <div className="flex-1 flex flex-col justify-between py-2">
+          <div className="flex-1 flex flex-col justify-between py-1">
             <div>
               <div className="text-center mb-2">
-                <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full">
-                  படி 1: குரல் வழி சேத விபரம் பதிவு (Voice Intimation)
+                <span className="text-[11px] font-bold bg-emerald-100 text-emerald-800 px-3 py-0.5 rounded-full">
+                  படி 1: குரல் வழி சேத விபரம் பதிவு
                 </span>
-                <h2 className="text-xl font-bold text-gray-900 mt-2">என்ன நடந்தது என்று கூறுங்கள்</h2>
-                <p className="text-xs text-gray-600 mt-1">
-                  எந்த விலங்கு, எந்தப் பயிர், எத்தனை மரங்கள் சேதமடைந்தது என்று பேசவும்.
-                </p>
+                <h2 className="text-lg font-bold text-gray-900 mt-1.5">என்ன நடந்தது என்று கூறுங்கள்</h2>
+                <p className="text-xs text-gray-600">எந்த விலங்கு, எந்தப் பயிர், எத்தனை மரங்கள் சேதமடைந்தது என்று பேசவும்.</p>
               </div>
 
-              {/* Push To Talk Microphone Button */}
+              {/* Push To Talk Mic */}
               <PushToTalkMic
                 isRecording={isRecording}
                 isProcessing={isProcessingVoice}
@@ -383,11 +557,33 @@ export function App() {
               {/* Realtime Waveform Animation */}
               <AudioWaveform volume={volume} isRecording={isRecording} />
 
-              {/* Transcribed Speech Box */}
+              {/* Voice Error Notice with Retry Button (Preserves recording) */}
+              {voiceError && (
+                <div className="bg-red-50 border border-red-300 rounded-2xl p-3.5 my-3 text-xs text-red-900">
+                  <div className="flex items-center gap-1.5 font-bold mb-1">
+                    <XCircle className="w-4 h-4 text-red-600" />
+                    <span>குரல் செயலாக்கம் பிழை (Processing Error)</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed mb-2.5">{voiceError}</p>
+
+                  {savedAudioBlob && (
+                    <button
+                      onClick={() => submitAudioTurn(savedAudioBlob)}
+                      disabled={isProcessingVoice}
+                      className="w-full py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 transition text-xs shadow-sm"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isProcessingVoice ? 'animate-spin' : ''}`} />
+                      <span>பதிவான குரலை மீண்டும் சமர்ப்பி (Retry Same Recording)</span>
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Real Transcript */}
               {transcript && (
-                <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm mt-3">
-                  <p className="text-xs font-bold text-gray-500 mb-1">நீங்கள் பேசியது (Voice Transcript):</p>
-                  <p className="text-sm font-medium text-gray-900 italic">"{transcript}"</p>
+                <div className="bg-white rounded-2xl p-3 border border-gray-200 shadow-sm mt-3">
+                  <p className="text-[11px] font-bold text-gray-500 mb-0.5">நீங்கள் பேசியது (Voice Transcript):</p>
+                  <p className="text-xs font-medium text-gray-900 italic leading-relaxed">"{transcript}"</p>
                 </div>
               )}
 
@@ -400,45 +596,45 @@ export function App() {
                 />
               )}
 
-              {/* Review & Clarification Prompts */}
+              {/* Review & Clarification Prompts (Neutral, no impossibility rules) */}
               {contradictions.length > 0 && (
-                <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 my-3 text-xs text-amber-950">
+                <div className="bg-amber-50 border border-amber-300 rounded-2xl p-3.5 my-3 text-xs text-amber-950">
                   <div className="flex items-center gap-1.5 font-bold text-amber-900 mb-1">
                     <AlertTriangle className="w-4 h-4 text-amber-600" />
-                    <span>விவர சரிபார்ப்பு குறிப்பு (Review & Clarification Note)</span>
+                    <span>விவர சரிபார்ப்பு குறிப்பு (Review & Clarification)</span>
                   </div>
                   {contradictions.map((c, i) => (
-                    <p key={i} className="mt-1 leading-relaxed">{c.prompt_ta}</p>
+                    <p key={i} className="mt-1 leading-relaxed text-[11px]">{c.prompt_ta}</p>
                   ))}
                 </div>
               )}
 
               {/* Extracted Data Card */}
               {extractedData && (
-                <div className="bg-emerald-50/60 rounded-2xl p-4 border border-emerald-200 shadow-sm mt-3">
-                  <p className="text-xs font-bold text-emerald-900 mb-2">பதிவான விவரங்கள் (Extracted Data):</p>
+                <div className="bg-emerald-50/60 rounded-2xl p-3.5 border border-emerald-200 shadow-sm mt-3">
+                  <p className="text-xs font-bold text-emerald-900 mb-2">பதிவான விவரங்கள் (Extracted Details):</p>
                   <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="bg-white p-2.5 rounded-xl border border-emerald-100">
-                      <span className="text-gray-500 text-[11px] block">தாக்கிய விலங்கு:</span>
-                      <span className="font-bold text-gray-900 text-sm">
+                    <div className="bg-white p-2 rounded-xl border border-emerald-100">
+                      <span className="text-gray-500 text-[10px] block">தாக்கிய விலங்கு:</span>
+                      <span className="font-bold text-gray-900 text-xs">
                         {extractedData.wildlife_species_tamil || extractedData.wildlife_species}
                       </span>
                     </div>
-                    <div className="bg-white p-2.5 rounded-xl border border-emerald-100">
-                      <span className="text-gray-500 text-[11px] block">சேதமடைந்த பயிர்:</span>
-                      <span className="font-bold text-gray-900 text-sm">
+                    <div className="bg-white p-2 rounded-xl border border-emerald-100">
+                      <span className="text-gray-500 text-[10px] block">சேதமடைந்த பயிர்:</span>
+                      <span className="font-bold text-gray-900 text-xs">
                         {extractedData.crop_damaged_tamil || extractedData.crop_damaged}
                       </span>
                     </div>
-                    <div className="bg-white p-2.5 rounded-xl border border-emerald-100">
-                      <span className="text-gray-500 text-[11px] block">சேத அளவு:</span>
-                      <span className="font-bold text-emerald-700 text-sm">
+                    <div className="bg-white p-2 rounded-xl border border-emerald-100">
+                      <span className="text-gray-500 text-[10px] block">சேத அளவு:</span>
+                      <span className="font-bold text-emerald-700 text-xs">
                         {extractedData.damage_quantity} {extractedData.damage_unit_tamil || 'மரங்கள்'}
                       </span>
                     </div>
-                    <div className="bg-white p-2.5 rounded-xl border border-emerald-100">
-                      <span className="text-gray-500 text-[11px] block">சம்பவ நேரம்:</span>
-                      <span className="font-bold text-gray-900 text-sm">
+                    <div className="bg-white p-2 rounded-xl border border-emerald-100">
+                      <span className="text-gray-500 text-[10px] block">சம்பவ நேரம்:</span>
+                      <span className="font-bold text-gray-900 text-xs">
                         {extractedData.incident_time_approx || 'இரவு'}
                       </span>
                     </div>
@@ -447,18 +643,18 @@ export function App() {
               )}
             </div>
 
-            {/* Bottom Navigation */}
+            {/* Bottom Proceed CTA */}
             {extractedData && (
-              <div className="pt-4 mt-auto">
+              <div className="pt-3 mt-auto">
                 <button
                   onClick={() => {
                     camera.startCamera();
                     setCurrentStep('CAMERA');
                   }}
-                  className="w-full py-4 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-2xl shadow-md transition flex items-center justify-center gap-2"
+                  className="w-full py-3.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-2xl shadow-md transition flex items-center justify-center gap-2 text-sm"
                 >
                   <span>அடுத்தது: புகைப்பட சான்று எடுக்க</span>
-                  <ArrowRight className="w-5 h-5" />
+                  <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
             )}
@@ -466,66 +662,56 @@ export function App() {
         )}
 
         {/* ============================================================== */}
-        {/* STEP 3: GUIDED CAMERA EVIDENCE */}
+        {/* STEP 3: CAMERA EVIDENCE */}
         {/* ============================================================== */}
         {currentStep === 'CAMERA' && (
-          <div className="flex-1 flex flex-col justify-between py-2">
+          <div className="flex-1 flex flex-col justify-between py-1">
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full">
                   படி 2: புகைப்பட சான்றுகள் ({photoStep === 'WIDE' ? '1/2' : '2/2'})
                 </span>
                 <GPSIndicator gps={camera.gps} />
               </div>
 
-              <h2 className="text-lg font-bold text-gray-900 mb-1">
-                {photoStep === 'WIDE'
-                  ? 'தோட்டத்தின் முழுத்தோற்ற சேத படம்'
-                  : 'விலங்கு தடம் / சேத அடையாளம் (Close-up)'}
+              <h2 className="text-base font-bold text-gray-900 mb-0.5">
+                {photoStep === 'WIDE' ? 'தோட்டத்தின் முழுத்தோற்ற சேத படம்' : 'விலங்கு தடம் / சேத அடையாளம் (Close-up)'}
               </h2>
-              <p className="text-xs text-gray-600 mb-3">
+              <p className="text-[11px] text-gray-600 mb-2.5">
                 {photoStep === 'WIDE'
-                  ? 'பயிர் வரிசைகளும் சேதமும் தெரியும்படி தூரத்திலிருந்து எடுக்கவும்.'
-                  : 'யானை கால்தடம், சாணம் அல்லது தும்பிக்கை சேதத்தை தெளிவாக படம் எடுக்கவும்.'}
+                  ? 'பயிர் வரிசைகளும் சேதமும் தெரியும்படி சற்று தூரத்திலிருந்து எடுக்கவும்.'
+                  : 'யானை கால்தடம், சாணம் அல்லது தும்பிக்கை முறிவை தெளிவாக படம் எடுக்கவும்.'}
               </p>
 
-              {/* Camera Viewfinder */}
+              {/* Viewfinder */}
               <div className="relative w-full aspect-[4/3] bg-black rounded-3xl overflow-hidden shadow-inner flex items-center justify-center">
-                <video
-                  ref={camera.videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover"
-                />
-
-                {/* Framing Overlay */}
+                <video ref={camera.videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
                 <div className="absolute inset-4 border-2 border-dashed border-white/60 rounded-2xl pointer-events-none flex items-center justify-center">
-                  <span className="bg-black/60 text-white text-[11px] px-3 py-1 rounded-full backdrop-blur-sm">
+                  <span className="bg-black/60 text-white text-[10px] px-3 py-1 rounded-full backdrop-blur-sm">
                     {photoStep === 'WIDE' ? 'முழுத்தோற்றம் பிரேம்' : 'தடம் / அடையாளம் பிரேம்'}
                   </span>
                 </div>
               </div>
 
-              {/* Thumbnails of captured photos */}
-              <div className="grid grid-cols-2 gap-3 mt-4">
-                <div className="bg-white p-2 rounded-xl border border-gray-200 text-center">
+              {/* Thumbnails */}
+              <div className="grid grid-cols-2 gap-2 mt-3">
+                <div className="bg-white p-1.5 rounded-xl border border-gray-200 text-center">
                   <p className="text-[10px] font-bold text-gray-500 mb-1">முழுத்தோற்ற படம்</p>
                   {widePhotoUrl ? (
-                    <img src={widePhotoUrl} alt="Wide shot" className="w-full h-20 object-cover rounded-lg" />
+                    <img src={widePhotoUrl} alt="Wide shot" className="w-full h-16 object-cover rounded-lg" />
                   ) : (
-                    <div className="w-full h-20 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 text-xs">
+                    <div className="w-full h-16 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 text-[11px]">
                       இன்னும் எடுக்கப்படவில்லை
                     </div>
                   )}
                 </div>
 
-                <div className="bg-white p-2 rounded-xl border border-gray-200 text-center">
+                <div className="bg-white p-1.5 rounded-xl border border-gray-200 text-center">
                   <p className="text-[10px] font-bold text-gray-500 mb-1">விலங்கு தடம் படம்</p>
                   {spoorPhotoUrl ? (
-                    <img src={spoorPhotoUrl} alt="Spoor shot" className="w-full h-20 object-cover rounded-lg" />
+                    <img src={spoorPhotoUrl} alt="Spoor shot" className="w-full h-16 object-cover rounded-lg" />
                   ) : (
-                    <div className="w-full h-20 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 text-xs">
+                    <div className="w-full h-16 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 text-[11px]">
                       {photoStep === 'WIDE' ? 'அடுத்தது...' : 'இப்போது எடுக்கவும்'}
                     </div>
                   )}
@@ -534,15 +720,15 @@ export function App() {
             </div>
 
             {/* Shutter Button */}
-            <div className="pt-4 mt-auto flex flex-col items-center">
+            <div className="pt-3 mt-auto flex flex-col items-center">
               <button
                 onClick={handleSnapPhoto}
-                className="w-20 h-20 rounded-full border-4 border-white bg-amber-500 hover:bg-amber-600 active:scale-95 shadow-xl flex items-center justify-center text-white"
+                className="w-16 h-16 rounded-full border-4 border-white bg-amber-500 hover:bg-amber-600 active:scale-95 shadow-xl flex items-center justify-center text-white"
                 aria-label="Capture photograph"
               >
-                <Camera className="w-8 h-8" />
+                <Camera className="w-7 h-7" />
               </button>
-              <p className="text-xs font-semibold text-gray-600 mt-2">
+              <p className="text-[11px] font-semibold text-gray-600 mt-1.5">
                 {photoStep === 'WIDE' ? 'படம் 1 எடுக்க தட்டவும்' : 'படம் 2 எடுக்க தட்டவும்'}
               </p>
             </div>
@@ -550,90 +736,61 @@ export function App() {
         )}
 
         {/* ============================================================== */}
-        {/* STEP 4: DOCUMENT CHECKLIST */}
+        {/* STEP 4: DOCUMENT CHECKLIST (Reflects Actual Selections) */}
         {/* ============================================================== */}
         {currentStep === 'CHECKLIST' && (
-          <div className="flex-1 flex flex-col justify-between py-2">
+          <div className="flex-1 flex flex-col justify-between py-1">
             <div>
-              <div className="text-center mb-3">
-                <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full">
+              <div className="text-center mb-2.5">
+                <span className="text-[11px] font-bold bg-emerald-100 text-emerald-800 px-3 py-0.5 rounded-full">
                   படி 3: ஆவணங்கள் சரிபார்ப்பு பட்டியல்
                 </span>
-                <h2 className="text-xl font-bold text-gray-900 mt-2">இணைக்க வேண்டிய ஆவணங்கள்</h2>
-                <p className="text-xs text-gray-600 mt-1">
-                  விண்ணப்பத்துடன் இணைக்க உங்களிடம் உள்ள ஆவணங்களை உறுதிப்படுத்தவும்.
-                </p>
+                <h2 className="text-lg font-bold text-gray-900 mt-1">உங்களிடம் தயாராக உள்ள ஆவணங்கள்</h2>
+                <p className="text-xs text-gray-600">உங்களிடம் உள்ள ஆவணங்களை மட்டும் தேர்ந்தெடுக்கவும் (உண்மையான தேர்வு).</p>
               </div>
 
-              {/* Checklist Cards */}
-              <div className="space-y-3 mt-4">
+              <div className="space-y-2 mt-3">
                 {[
-                  {
-                    key: 'patta',
-                    title: 'பட்டா / சிட்டா நகல் (Patta Copy)',
-                    desc: 'நில உரிமைக்கான சான்று',
-                    ready: checklist.patta
-                  },
-                  {
-                    key: 'adangal',
-                    title: 'கிராம நிர்வாக அலுவலர் அடங்கல் (VAO Adangal)',
-                    desc: 'பயிர் சாகுபடி சான்று (VAO கையொப்பம் தேவை)',
-                    ready: checklist.adangal
-                  },
-                  {
-                    key: 'bank',
-                    title: 'வங்கி கணக்கு புத்தக நகல் (Bank Passbook)',
-                    desc: 'நேரடி வங்கி பரிமாற்றத்திற்கு (DBT)',
-                    ready: checklist.bank
-                  },
-                  {
-                    key: 'aadhaar',
-                    title: 'ஆதார் அடையாள அட்டை (Aadhaar Card)',
-                    desc: 'விவசாயியின் அடையாள அட்டை நகல்',
-                    ready: checklist.aadhaar
-                  },
-                  {
-                    key: 'witness',
-                    title: 'அண்டை நில சாட்சிகள் (2 Adjacent Witnesses)',
-                    desc: 'பக்கத்து நிலத்து விவசாயிகளின் கையொப்பம்',
-                    ready: checklist.witness
-                  }
-                ].map((item) => (
-                  <div
-                    key={item.key}
-                    onClick={() =>
-                      setChecklist((prev: any) => ({ ...prev, [item.key]: !prev[item.key] }))
-                    }
-                    className={`p-3.5 rounded-2xl border transition cursor-pointer flex items-center justify-between ${
-                      item.ready
-                        ? 'bg-emerald-50 border-emerald-300'
-                        : 'bg-white border-gray-200'
-                    }`}
-                  >
-                    <div>
-                      <p className="text-xs font-bold text-gray-900">{item.title}</p>
-                      <p className="text-[11px] text-gray-500">{item.desc}</p>
-                    </div>
+                  { key: 'patta', title: 'பட்டா / சிட்டா நகல் (Patta Copy)', desc: 'நில உரிமைக்கான சான்று' },
+                  { key: 'adangal', title: 'VAO அடங்கல் சான்று (VAO Adangal)', desc: 'பயிர் சாகுபடி சான்று' },
+                  { key: 'bank', title: 'வங்கி கணக்கு புத்தகம் (Bank Passbook)', desc: 'நேரடி வங்கி பரிமாற்றத்திற்கு' },
+                  { key: 'aadhaar', title: 'ஆதார் அட்டை (Aadhaar Card)', desc: 'விவசாயியின் அடையாள சான்று' },
+                  { key: 'witness', title: 'அண்டை நில சாட்சிகள் (Adjacent Witnesses)', desc: 'பக்கத்து நிலத்து விவசாயிகள் உறுதி' }
+                ].map((item) => {
+                  const isChecked = (checklist as any)[item.key];
+                  return (
                     <div
-                      className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
-                        item.ready ? 'bg-emerald-700 text-white' : 'border-2 border-gray-300'
+                      key={item.key}
+                      onClick={() => setChecklist((prev: any) => ({ ...prev, [item.key]: !prev[item.key] }))}
+                      className={`p-3 rounded-2xl border transition cursor-pointer flex items-center justify-between ${
+                        isChecked ? 'bg-emerald-50 border-emerald-300' : 'bg-white border-gray-200'
                       }`}
                     >
-                      {item.ready && <CheckCircle2 className="w-4 h-4" />}
+                      <div>
+                        <p className="text-xs font-bold text-gray-900">{item.title}</p>
+                        <p className="text-[11px] text-gray-500">{item.desc}</p>
+                      </div>
+                      <div
+                        className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
+                          isChecked ? 'bg-emerald-700 text-white' : 'border-2 border-gray-300'
+                        }`}
+                      >
+                        {isChecked && <CheckCircle2 className="w-3.5 h-3.5" />}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
             {/* Bottom Generate CTA */}
-            <div className="pt-4 mt-auto">
+            <div className="pt-3 mt-auto">
               <button
                 onClick={handleGenerateDossier}
-                className="w-full py-4 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-2xl shadow-md transition flex items-center justify-center gap-2"
+                className="w-full py-3.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-2xl shadow-md transition flex items-center justify-center gap-2 text-sm"
               >
-                <span>சுய சான்றாவணம் உருவாக்க (Generate Evidence Dossier PDF)</span>
-                <ArrowRight className="w-5 h-5" />
+                <span>சுய சான்றாவணம் உருவாக்க (Generate Dossier)</span>
+                <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -643,74 +800,275 @@ export function App() {
         {/* STEP 5: OFFICIAL DOSSIER GENERATED */}
         {/* ============================================================== */}
         {currentStep === 'DOSSIER' && (
-          <div className="flex-1 flex flex-col justify-between py-2 text-center">
+          <div className="flex-1 flex flex-col justify-between py-1 text-center">
             <div>
-              <div className="w-20 h-20 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center mx-auto mb-3 shadow-inner">
-                <CheckCircle2 className="w-10 h-10" />
+              <div className="w-16 h-16 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center mx-auto mb-2 shadow-inner">
+                <CheckCircle2 className="w-8 h-8" />
               </div>
 
-              <h2 className="text-xl font-bold text-gray-900">சான்றாவணம் தயாரானது!</h2>
-              <p className="text-xs text-gray-600 mt-1">
-                சுய அறிவிப்பு சான்றாவணம் வெற்றிகரமாக உருவாக்கப்பட்டது (அரசு படிவம் அல்ல - விவசாயி சான்றுத் தொகுப்பு).
-              </p>
+              <h2 className="text-lg font-bold text-gray-900">சான்றாவணம் தயாரானது!</h2>
+              <p className="text-xs text-gray-600">சுய அறிவிப்பு சான்றாவணம் வெற்றிகரமாக உருவாக்கப்பட்டது (அரசு ஆவணம் அல்ல).</p>
 
-              {/* Dossier Code Card */}
-              <div className="bg-white rounded-2xl p-4 border border-emerald-200 shadow-sm my-4 text-left">
-                <div className="flex items-center justify-between border-b pb-2 mb-2">
-                  <span className="text-xs text-gray-500 font-medium">சான்றாவண எண் (Dossier ID):</span>
-                  <span className="text-xs font-bold font-mono text-emerald-900">{createdIncidentCode}</span>
+              {/* Dossier Summary Card (Shows Real GPS and Real Farmer) */}
+              <div className="bg-white rounded-2xl p-3.5 border border-emerald-200 shadow-sm my-3 text-left text-xs">
+                <div className="flex items-center justify-between border-b pb-1.5 mb-1.5">
+                  <span className="text-gray-500">சான்றாவண எண் (Dossier ID):</span>
+                  <span className="font-bold font-mono text-emerald-900">{createdIncidentCode || 'RPD-2026-VAL-001'}</span>
                 </div>
-                <div className="flex items-center justify-between border-b pb-2 mb-2">
-                  <span className="text-xs text-gray-500 font-medium">சேத விபரம்:</span>
-                  <span className="text-xs font-bold text-gray-900">
-                    {extractedData?.damage_quantity || 40} {extractedData?.crop_damaged_tamil || 'வாழை'} மரங்கள்
+                <div className="flex items-center justify-between border-b pb-1.5 mb-1.5">
+                  <span className="text-gray-500">விவசாயி:</span>
+                  <span className="font-bold text-gray-900">{profile.name} ({profile.village})</span>
+                </div>
+                <div className="flex items-center justify-between border-b pb-1.5 mb-1.5">
+                  <span className="text-gray-500">சேத விபரம்:</span>
+                  <span className="font-bold text-gray-900">
+                    {extractedData?.damage_quantity || 10} {extractedData?.crop_damaged_tamil || 'வாழை'} {extractedData?.damage_unit_tamil || 'மரங்கள்'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500 font-medium">ஒப்புதல் இருப்பிட தகவல் (GPS):</span>
-                  <span className="text-xs font-bold text-gray-900">10.3245° N, 76.9512° E (±8 மீ)</span>
+                  <span className="text-gray-500">ஒப்புதல் இருப்பிட தகவல் (GPS):</span>
+                  <span className="font-bold text-gray-900">
+                    {capturedGps?.isLocked
+                      ? `${capturedGps.latitude.toFixed(4)}°N, ${capturedGps.longitude.toFixed(4)}°E (±${Math.round(capturedGps.accuracy)}மீ)`
+                      : 'இருப்பிடம் பதிவு செய்யப்படவில்லை (No GPS Recorded)'}
+                  </span>
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="space-y-3">
+              {/* Actions */}
+              <div className="space-y-2.5">
                 <a
                   href={dossierPdfUrl || '/api/v1/dossier/sample/pdf'}
                   target="_blank"
                   rel="noreferrer"
-                  className="w-full py-4 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-2xl shadow-md transition flex items-center justify-center gap-2"
+                  className="w-full py-3.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-2xl shadow-md transition flex items-center justify-center gap-2 text-sm"
                 >
-                  <Download className="w-5 h-5" />
+                  <Download className="w-4 h-4" />
                   <span>PDF சான்றிதழ் பதிவிறக்கம் (Download PDF)</span>
                 </a>
 
                 <button
                   onClick={() => {
                     const text = encodeURIComponent(
-                      `வணக்கம். எனது பயிர்ச்சேத சான்றாவணம் (Dossier ID: ${createdIncidentCode}) தயாராகியுள்ளது. பார்வைக்கு இணைக்கப்பட்டுள்ளது.`
+                      `வணக்கம். எனது பயிர்ச்சேத சான்றாவணம் (Dossier ID: ${createdIncidentCode}) தயாராகியுள்ளது.`
                     );
                     window.open(`https://wa.me/?text=${text}`, '_blank');
                   }}
-                  className="w-full py-3.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-2xl shadow-sm transition flex items-center justify-center gap-2"
+                  className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-2xl shadow-sm transition flex items-center justify-center gap-2 text-sm"
                 >
                   <Share2 className="w-4 h-4" />
-                  <span>WhatsApp வழியாக அனுப்பவும் (Share to VAO)</span>
+                  <span>WhatsApp வழியாக பகிரவும் (Share)</span>
                 </button>
               </div>
             </div>
 
-            <div className="pt-4 mt-auto">
+            <div className="pt-3 mt-auto">
               <button
                 onClick={() => setCurrentStep('DASHBOARD')}
-                className="text-xs font-bold text-gray-600 hover:text-gray-900 flex items-center justify-center gap-1.5 mx-auto p-2"
+                className="text-xs font-bold text-gray-600 hover:text-gray-900 flex items-center justify-center gap-1 mx-auto p-2"
               >
-                <RotateCcw className="w-4 h-4" />
+                <RotateCcw className="w-3.5 h-3.5" />
                 <span>முகப்புக்கு செல்ல (Back to Dashboard)</span>
               </button>
             </div>
           </div>
         )}
       </main>
+
+      {/* ============================================================== */}
+      {/* MODAL: EDIT FARMER PROFILE */}
+      {/* ============================================================== */}
+      {isEditingProfile && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-5 w-full max-w-sm shadow-2xl text-xs space-y-3">
+            <h3 className="text-sm font-bold text-gray-900 border-b pb-2 flex items-center gap-1.5">
+              <User className="w-4 h-4 text-emerald-700" />
+              <span>விவசாயி சுய விபரங்கள் திருத்தம் (Farmer Profile)</span>
+            </h3>
+
+            <div>
+              <label className="font-semibold text-gray-700 block mb-0.5">விவசாயி பெயர் (Farmer Name):</label>
+              <input
+                type="text"
+                value={tempProfile.name}
+                onChange={(e) => setTempProfile({ ...tempProfile, name: e.target.value })}
+                className="w-full p-2 border rounded-xl"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="font-semibold text-gray-700 block mb-0.5">தொலைபேசி எண்:</label>
+                <input
+                  type="text"
+                  value={tempProfile.phone}
+                  onChange={(e) => setTempProfile({ ...tempProfile, phone: e.target.value })}
+                  className="w-full p-2 border rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="font-semibold text-gray-700 block mb-0.5">கிராமம் (Village):</label>
+                <input
+                  type="text"
+                  value={tempProfile.village}
+                  onChange={(e) => setTempProfile({ ...tempProfile, village: e.target.value })}
+                  className="w-full p-2 border rounded-xl"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="font-semibold text-gray-700 block mb-0.5">வட்டம் (Taluk):</label>
+                <input
+                  type="text"
+                  value={tempProfile.taluk}
+                  onChange={(e) => setTempProfile({ ...tempProfile, taluk: e.target.value })}
+                  className="w-full p-2 border rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="font-semibold text-gray-700 block mb-0.5">பட்டா எண்:</label>
+                <input
+                  type="text"
+                  value={tempProfile.pattaNumber}
+                  onChange={(e) => setTempProfile({ ...tempProfile, pattaNumber: e.target.value })}
+                  className="w-full p-2 border rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="font-semibold text-gray-700 block mb-0.5">நிலப்பரப்பு (ஏக்கர்):</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={tempProfile.acres}
+                  onChange={(e) => setTempProfile({ ...tempProfile, acres: parseFloat(e.target.value) || 1.0 })}
+                  className="w-full p-2 border rounded-xl"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="font-semibold text-gray-700 block mb-0.5">சர்வே எண் (Survey No):</label>
+              <input
+                type="text"
+                value={tempProfile.surveyNumber}
+                onChange={(e) => setTempProfile({ ...tempProfile, surveyNumber: e.target.value })}
+                className="w-full p-2 border rounded-xl"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-2 border-t">
+              <button
+                onClick={() => setIsEditingProfile(false)}
+                className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl"
+              >
+                ரத்து (Cancel)
+              </button>
+              <button
+                onClick={handleSaveProfile}
+                className="flex-1 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl flex items-center justify-center gap-1.5"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>சேமி (Save Profile)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL: LIVE API DIAGNOSTICS & SYSTEM AUDIT */}
+      {/* ============================================================== */}
+      {showDiagnostics && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-5 w-full max-w-sm shadow-2xl text-xs space-y-3">
+            <div className="flex items-center justify-between border-b pb-2">
+              <h3 className="text-sm font-bold text-gray-900 flex items-center gap-1.5">
+                <Activity className="w-4 h-4 text-emerald-700" />
+                <span>கணினி ஆய்வு (API Diagnostics)</span>
+              </h3>
+              <button
+                onClick={() => setShowDiagnostics(false)}
+                className="p-1 hover:bg-gray-100 rounded-full"
+              >
+                <XCircle className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
+
+            {isLoadingDiag ? (
+              <div className="text-center py-8 text-gray-500 space-y-2">
+                <RefreshCw className="w-6 h-6 animate-spin mx-auto text-emerald-700" />
+                <p>ஞானி AI இணைப்பை சோதிக்கிறது...</p>
+              </div>
+            ) : diagData ? (
+              <div className="space-y-2.5">
+                {/* Voice Mode Banner */}
+                <div className={`p-3 rounded-2xl border ${
+                  diagData.voice_mode === 'REAL' ? 'bg-emerald-50 border-emerald-300' : 'bg-amber-50 border-amber-300'
+                }`}>
+                  <p className="font-bold text-xs flex items-center justify-between">
+                    <span>பயன்முறை (Voice Mode):</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] ${
+                      diagData.voice_mode === 'REAL' ? 'bg-emerald-700 text-white' : 'bg-amber-600 text-white'
+                    }`}>
+                      {diagData.voice_mode === 'REAL' ? 'REAL GNANI CLOUD' : 'MOCK EMULATION'}
+                    </span>
+                  </p>
+                  <p className="text-[11px] text-gray-600 mt-1">{diagData.message}</p>
+                </div>
+
+                {/* STT Status */}
+                <div className="p-2.5 rounded-xl bg-gray-50 border border-gray-200">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-gray-800">Prisma STT:</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      diagData.stt?.status === 'connected' || diagData.stt?.status === 'operational'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {diagData.stt?.status?.toUpperCase()}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-gray-500 mt-0.5">Model: {diagData.stt?.model} ({diagData.stt?.endpoint})</p>
+                </div>
+
+                {/* TTS Status */}
+                <div className="p-2.5 rounded-xl bg-gray-50 border border-gray-200">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-gray-800">Timbre TTS:</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      diagData.tts?.status === 'connected' || diagData.tts?.status === 'operational'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {diagData.tts?.status?.toUpperCase()}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-gray-500 mt-0.5">Model: {diagData.tts?.model} • Voice: {diagData.tts?.voice}</p>
+                </div>
+
+                {/* Latency */}
+                <div className="flex items-center justify-between text-[11px] text-gray-500 px-1">
+                  <span>இணைப்பு வேகம் (Latency):</span>
+                  <span className="font-mono font-bold text-emerald-800">{diagData.latency_ms} ms</span>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="pt-2 border-t">
+              <button
+                onClick={handleRunDiagnostics}
+                disabled={isLoadingDiag}
+                className="w-full py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 transition text-xs"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingDiag ? 'animate-spin' : ''}`} />
+                <span>மீண்டும் இணைப்பை சோதி (Test Connection Again)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

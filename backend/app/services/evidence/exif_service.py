@@ -85,8 +85,8 @@ class ExifService:
     def process_and_watermark(
         cls,
         image_bytes: bytes,
-        latitude: float,
-        longitude: float,
+        latitude: Optional[float],
+        longitude: Optional[float],
         timestamp_str: str,
         label: str = "FIELD DAMAGE"
     ) -> bytes:
@@ -107,7 +107,12 @@ class ExifService:
             fill=(0, 0, 0, 200)
         )
 
-        watermark_text = f"RAIDPROOF AI | SELF-REPORTED EVIDENCE | {label} | GPS: {latitude:.5f}°N, {longitude:.5f}°E | TIME: {timestamp_str}"
+        if latitude is not None and longitude is not None:
+            gps_label = f"GPS: {latitude:.5f}°N, {longitude:.5f}°E"
+        else:
+            gps_label = "GPS: NOT RECORDED"
+
+        watermark_text = f"RAIDPROOF AI | SELF-REPORTED EVIDENCE | {label} | {gps_label} | TIME: {timestamp_str}"
         draw.text((12, height - banner_height + 12), watermark_text, fill=(255, 255, 255))
 
         out_buffer = io.BytesIO()

@@ -278,16 +278,27 @@ class DossierPDFGenerator:
         img1 = get_photo_element(wide_photo_path, "முழுத்தோற்ற சேத படம் (Wide View)")
         img2 = get_photo_element(spoor_photo_path, "விலங்கு தடம் / சேத அடையாளம் (Close-up)")
 
-        gps_info = incident_data.get("gps", {"lat": 10.324512, "lon": 76.951234, "accuracy": 8.0})
-        acc_str = f"±{gps_info.get('accuracy', 8.0):.0f} மீ"
-        meta1 = Paragraph(
-            f"<b>படம் 1:</b> முழுத்தோற்றம் | <b>ஒப்புதல் இருப்பிட தகவல்:</b> {gps_info['lat']:.4f}°N, {gps_info['lon']:.4f}°E ({acc_str}) - சரிபார்க்கப்படாத பதிவு",
-            cell_sub
-        )
-        meta2 = Paragraph(
-            f"<b>படம் 2:</b> சேத அடையாளம் | <b>ஒப்புதல் இருப்பிட தகவல்:</b> {gps_info['lat']:.4f}°N, {gps_info['lon']:.4f}°E ({acc_str}) - சரிபார்க்கப்படாத பதிவு",
-            cell_sub
-        )
+        gps_info = incident_data.get("gps")
+        if gps_info and gps_info.get("lat") is not None and gps_info.get("lon") is not None:
+            acc_str = f"±{gps_info.get('accuracy', 10.0):.0f} மீ"
+            gps_label = f"{gps_info['lat']:.5f}°N, {gps_info['lon']:.5f}°E ({acc_str})"
+            meta1 = Paragraph(
+                f"<b>படம் 1:</b> முழுத்தோற்றம் | <b>ஒப்புதல் இருப்பிட தகவல்:</b> {gps_label} — சரிபார்க்கப்படாத பதிவு",
+                cell_sub
+            )
+            meta2 = Paragraph(
+                f"<b>படம் 2:</b> சேத அடையாளம் | <b>ஒப்புதல் இருப்பிட தகவல்:</b> {gps_label} — சரிபார்க்கப்படாத பதிவு",
+                cell_sub
+            )
+        else:
+            meta1 = Paragraph(
+                "<b>படம் 1:</b> முழுத்தோற்றம் | <b>இருப்பிட தகவல்:</b> பதிவு செய்யப்படவில்லை (No GPS Recorded)",
+                cell_sub
+            )
+            meta2 = Paragraph(
+                "<b>படம் 2:</b> சேத அடையாளம் | <b>இருப்பிட தகவல்:</b> பதிவு செய்யப்படவில்லை (No GPS Recorded)",
+                cell_sub
+            )
 
         photo_table = Table(
             [
@@ -313,15 +324,21 @@ class DossierPDFGenerator:
         p4_data = [
             [
                 Paragraph("பட்டா / சிட்டா நகல்:", cell_bold),
-                Paragraph(status_tag(chk.get("patta", True)), cell_normal),
+                Paragraph(status_tag(chk.get("patta", False)), cell_normal),
                 Paragraph("VAO அடங்கல் சான்று:", cell_bold),
                 Paragraph(status_tag(chk.get("adangal", False)), cell_normal),
             ],
             [
                 Paragraph("வங்கி கணக்கு புத்தகம்:", cell_bold),
-                Paragraph(status_tag(chk.get("bank", True)), cell_normal),
+                Paragraph(status_tag(chk.get("bank", False)), cell_normal),
                 Paragraph("ஆதார் அடையாள அட்டை:", cell_bold),
-                Paragraph(status_tag(chk.get("aadhaar", True)), cell_normal),
+                Paragraph(status_tag(chk.get("aadhaar", False)), cell_normal),
+            ],
+            [
+                Paragraph("அண்டை நில சாட்சி விவரம்:", cell_bold),
+                Paragraph(status_tag(chk.get("witness", False)), cell_normal),
+                Paragraph("சான்றாவண நிலை:", cell_bold),
+                Paragraph("சுய அறிவிப்பு தயார்", cell_normal),
             ]
         ]
         t4 = Table(p4_data, colWidths=[130, 133, 130, 134])

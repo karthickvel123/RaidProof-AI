@@ -53,3 +53,16 @@ async def test_sample_dossier_pdf_api():
         assert response.headers["content-type"] == "application/pdf"
         assert len(response.content) > 1000
 
+@pytest.mark.asyncio
+async def test_voice_diagnostics_endpoint():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/v1/voice/diagnostics")
+        assert response.status_code == 200
+        data = response.json()
+        assert "voice_mode" in data
+        assert "status" in data
+        assert "stt" in data
+        assert "tts" in data
+
+
