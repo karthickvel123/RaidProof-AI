@@ -23,18 +23,24 @@ class ConversationOrchestrator:
         content_type: str = "audio/wav",
         language_code: str = "ta-IN",
         parcel_acres: Optional[float] = None,
-        farmer_name: Optional[str] = None
+        farmer_name: Optional[str] = None,
+        transcript_override: Optional[str] = None
     ) -> IncidentListenResponse:
         voice_service = get_voice_service()
 
-        # 1. Speech to Text via Gnani Prisma v3.0 (or mock)
-        stt_result = await voice_service.transcribe_speech(
-            audio_bytes=audio_bytes,
-            filename=filename,
-            content_type=content_type,
-            language_code=language_code
-        )
-        transcript = stt_result.get("transcript", "")
+        # 1. Speech to Text via Gnani Prisma v3.0 (or direct transcript override if provided)
+        if transcript_override and transcript_override.strip():
+            transcript = transcript_override.strip()
+            confidence = 1.0
+        else:
+            stt_result = await voice_service.transcribe_speech(
+                audio_bytes=audio_bytes,
+                filename=filename,
+                content_type=content_type,
+                language_code=language_code
+            )
+            transcript = stt_result.get("transcript", "")
+            confidence = stt_result.get("confidence", 0.90)
 
         # 2. Extract structured entities via LLM / Tamil parser
         extracted = await IncidentExtractor.extract(transcript)
@@ -102,7 +108,7 @@ class ConversationOrchestrator:
 
         return IncidentListenResponse(
             transcript=transcript,
-            confidence=stt_result.get("confidence", 0.90),
+            confidence=confidence,
             extracted=extracted,
             contradictions=clarification_flags,
             review_flags=clarification_flags,

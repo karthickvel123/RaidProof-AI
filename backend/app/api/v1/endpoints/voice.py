@@ -200,7 +200,8 @@ async def voice_listen(
     farmer_id: Optional[str] = Form(None),
     farmer_name: Optional[str] = Form(None),
     language: str = Form("ta-IN"),
-    parcel_acres: Optional[float] = Form(None)
+    parcel_acres: Optional[float] = Form(None),
+    transcript_text: Optional[str] = Form(None)
 ):
     """
     Unified Voice Dialogue Endpoint:
@@ -220,7 +221,8 @@ async def voice_listen(
             content_type=audio_file.content_type or "audio/wav",
             language_code=language,
             parcel_acres=parcel_acres,
-            farmer_name=farmer_name
+            farmer_name=farmer_name,
+            transcript_override=transcript_text
         )
         return response
     except HTTPException:

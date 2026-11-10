@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Camera,
   CheckCircle2,
@@ -14,7 +14,11 @@ import {
   Edit3,
   RefreshCw,
   XCircle,
-  Save
+  Save,
+  Eye,
+  Upload,
+  Smartphone,
+  FileText
 } from 'lucide-react';
 
 import { useAudioRecorder } from './hooks/useAudioRecorder';
@@ -56,8 +60,11 @@ export function App() {
   // System Health & Voice Mode State
   const [systemHealth, setSystemHealth] = useState<{ status: string; voice_provider: string } | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [showPdfViewerModal, setShowPdfViewerModal] = useState(false);
   const [diagData, setDiagData] = useState<any>(null);
   const [isLoadingDiag, setIsLoadingDiag] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Farmer Profile State (No hardcoded demo data forced)
   const [profile, setProfile] = useState<FarmerProfile>(() => {
@@ -152,7 +159,7 @@ export function App() {
   };
 
   // Submit audio blob to voice listen API
-  const submitAudioTurn = async (audioBlob: Blob) => {
+  const submitAudioTurn = async (audioBlob: Blob, transcriptOverride?: string) => {
     setIsProcessingVoice(true);
     setVoiceError(null);
     setSavedAudioBlob(audioBlob);
@@ -164,6 +171,9 @@ export function App() {
       formData.append('farmer_name', profile.name);
       formData.append('language', language === 'ta' ? 'ta-IN' : 'en-IN');
       formData.append('parcel_acres', String(profile.acres));
+      if (transcriptOverride) {
+        formData.append('transcript_text', transcriptOverride);
+      }
 
       const res = await fetch('/api/v1/voice/listen', {
         method: 'POST',
@@ -210,6 +220,68 @@ export function App() {
       );
     } finally {
       setIsProcessingVoice(false);
+    }
+  };
+
+  // Quick test of realistic farmer scenario
+  const handleScenarioClick = async (scenarioText: string) => {
+    setTranscript(scenarioText);
+    const dummyHeader = new Uint8Array([
+      0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00,
+      0x57, 0x41, 0x56, 0x45, 0x66, 0x6d, 0x74, 0x20,
+      0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,
+      0x40, 0x1f, 0x00, 0x00, 0x80, 0x3e, 0x00, 0x00,
+      0x02, 0x00, 0x10, 0x00, 0x64, 0x61, 0x74, 0x61,
+      0x00, 0x00, 0x00, 0x00
+    ]);
+    const blob = new Blob([dummyHeader], { type: 'audio/wav' });
+    await submitAudioTurn(blob, scenarioText);
+  };
+
+  // Handle local file upload for photo
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        if (photoStep === 'WIDE') {
+          setWidePhotoUrl(dataUrl);
+          setWidePhotoBlob(file);
+          setPhotoStep('SPOOR');
+        } else {
+          setSpoorPhotoUrl(dataUrl);
+          setSpoorPhotoBlob(file);
+          camera.stopCamera();
+          setCurrentStep('CHECKLIST');
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Handle sample field photo capture fallback
+  const handleSampleFieldPhoto = async () => {
+    const photo = await camera.capturePhoto();
+    if (photo) {
+      if (camera.gps.isLocked) {
+        setCapturedGps({
+          latitude: camera.gps.latitude,
+          longitude: camera.gps.longitude,
+          accuracy: camera.gps.accuracy,
+          isLocked: true
+        });
+      }
+      if (photoStep === 'WIDE') {
+        setWidePhotoUrl(photo.dataUrl);
+        setWidePhotoBlob(photo.blob);
+        setPhotoStep('SPOOR');
+      } else {
+        setSpoorPhotoUrl(photo.dataUrl);
+        setSpoorPhotoBlob(photo.blob);
+        camera.stopCamera();
+        setCurrentStep('CHECKLIST');
+      }
     }
   };
 
@@ -356,6 +428,14 @@ export function App() {
 
         {/* Real Gnani Mode / Mock Mode Badge & Diagnostic Button */}
         <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setShowShareModal(true)}
+            title="மொபைல் பகிர்வு (Open on Mobile)"
+            className="p-1.5 rounded-lg bg-emerald-900 border border-emerald-700 text-emerald-200 hover:bg-emerald-950 transition"
+          >
+            <Smartphone className="w-4 h-4" />
+          </button>
+
           <button
             onClick={() => {
               setShowDiagnostics(true);
@@ -520,9 +600,20 @@ export function App() {
                         <p className="font-bold text-gray-900">{claim.crop_damaged_tamil || 'பயிர்'} சேதம்</p>
                         <p className="text-[11px] text-gray-500">{claim.incident_code} • {claim.damage_quantity} {claim.damage_unit_tamil || 'அளவு'}</p>
                       </div>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                        {claim.status || 'தயார்'}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <a
+                          href={claim.id ? `/api/v1/dossier/${claim.id}/pdf` : '/api/v1/dossier/sample/pdf'}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-[10px] font-bold flex items-center gap-1 transition"
+                        >
+                          <FileText className="w-3 h-3" />
+                          <span>PDF</span>
+                        </a>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                          {claim.status || 'தயார்'}
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -556,6 +647,70 @@ export function App() {
 
               {/* Realtime Waveform Animation */}
               <AudioWaveform volume={volume} isRecording={isRecording} />
+
+              {/* 1-Click Realistic Farmer Scenarios for Instant Real Voice & AI Testing */}
+              <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-3 my-2.5 shadow-sm">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-bold text-emerald-900 flex items-center gap-1">
+                    <span>⚡</span> மாதிரி விவசாயி குரல் சூழல் (1-Click Test Scenarios):
+                  </span>
+                  <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-semibold">
+                    REAL GNANI AI
+                  </span>
+                </div>
+                <p className="text-[10px] text-gray-600 mb-2">
+                  நேரடியாக குரல் பதிவு செய்ய முடியாவிட்டால், கீழேயுள்ள நிஜ சூழலைத் தேர்ந்தெடுத்து உடனடி ஞானி AI சோதனையை காணலாம்:
+                </p>
+                <div className="grid grid-cols-1 gap-1.5">
+                  <button
+                    onClick={() =>
+                      handleScenarioClick(
+                        'நேத்து ராத்திரி வால்பாறை தோட்டத்தில் ஒரு காட்டு யானை உள்ளே நுழைந்து 15 வாழை மரங்களை வேரோடு சாய்த்து தின்றுவிட்டது.'
+                      )
+                    }
+                    disabled={isProcessingVoice}
+                    className="p-2 rounded-xl bg-white hover:bg-emerald-100/70 border border-emerald-200 text-left transition flex items-center justify-between text-[11px] shadow-xs group"
+                  >
+                    <div>
+                      <span className="font-bold text-emerald-950 block">🐘 வால்பாறை: காட்டு யானை 15 வாழை மரங்கள்</span>
+                      <span className="text-[10px] text-gray-500">"நேத்து ராத்திரி காட்டு யானை 15 வாழை மரங்களை வேரோடு சாய்த்தது..."</span>
+                    </div>
+                    <span className="text-emerald-700 font-bold text-xs group-hover:translate-x-0.5 transition-transform">▶</span>
+                  </button>
+
+                  <button
+                    onClick={() =>
+                      handleScenarioClick(
+                        'பொள்ளாச்சி தோட்டத்தில் முந்தாநாள் இரவு 6 காட்டுப்பன்றிகள் வந்து அரை ஏக்கர் நிலக்கடலை பயிரை கிளறி நாசம் செய்துவிட்டது.'
+                      )
+                    }
+                    disabled={isProcessingVoice}
+                    className="p-2 rounded-xl bg-white hover:bg-emerald-100/70 border border-emerald-200 text-left transition flex items-center justify-between text-[11px] shadow-xs group"
+                  >
+                    <div>
+                      <span className="font-bold text-emerald-950 block">🐗 பொள்ளாச்சி: காட்டுப்பன்றிகள் நிலக்கடலை சேதம்</span>
+                      <span className="text-[10px] text-gray-500">"முந்தாநாள் இரவு 6 காட்டுப்பன்றிகள் வந்து நிலக்கடலையை கிளறியது..."</span>
+                    </div>
+                    <span className="text-emerald-700 font-bold text-xs group-hover:translate-x-0.5 transition-transform">▶</span>
+                  </button>
+
+                  <button
+                    onClick={() =>
+                      handleScenarioClick(
+                        'நீலகிரி மலையடிவாரத்தில் காட்டெருமை கூட்டம் வந்து 25 தேயிலை செடிகளையும் வேலியையும் முட்டி உடைத்துவிட்டது.'
+                      )
+                    }
+                    disabled={isProcessingVoice}
+                    className="p-2 rounded-xl bg-white hover:bg-emerald-100/70 border border-emerald-200 text-left transition flex items-center justify-between text-[11px] shadow-xs group"
+                  >
+                    <div>
+                      <span className="font-bold text-emerald-950 block">🐂 நீலகிரி: காட்டெருமை தேயிலை செடி சேதம்</span>
+                      <span className="text-[10px] text-gray-500">"காட்டெருமை கூட்டம் வந்து 25 தேயிலை செடிகளை முட்டி உடைத்தது..."</span>
+                    </div>
+                    <span className="text-emerald-700 font-bold text-xs group-hover:translate-x-0.5 transition-transform">▶</span>
+                  </button>
+                </div>
+              </div>
 
               {/* Voice Error Notice with Retry Button (Preserves recording) */}
               {voiceError && (
@@ -719,17 +874,48 @@ export function App() {
               </div>
             </div>
 
-            {/* Shutter Button */}
-            <div className="pt-3 mt-auto flex flex-col items-center">
-              <button
-                onClick={handleSnapPhoto}
-                className="w-16 h-16 rounded-full border-4 border-white bg-amber-500 hover:bg-amber-600 active:scale-95 shadow-xl flex items-center justify-center text-white"
-                aria-label="Capture photograph"
-              >
-                <Camera className="w-7 h-7" />
-              </button>
-              <p className="text-[11px] font-semibold text-gray-600 mt-1.5">
-                {photoStep === 'WIDE' ? 'படம் 1 எடுக்க தட்டவும்' : 'படம் 2 எடுக்க தட்டவும்'}
+            {/* Hidden File Input for Gallery / Test Photos */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              accept="image/*"
+              className="hidden"
+            />
+
+            {/* Shutter Button & Fallbacks */}
+            <div className="pt-3 mt-auto flex flex-col items-center gap-2.5">
+              <div className="flex items-center justify-center gap-4">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-3 py-2 bg-white hover:bg-gray-100 border border-gray-300 rounded-xl text-[11px] font-bold text-gray-700 flex items-center gap-1.5 shadow-2xs transition"
+                  title="கேலரியிலிருந்து படம் பதிவேற்ற"
+                >
+                  <Upload className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>📁 கேலரி படம்</span>
+                </button>
+
+                <button
+                  onClick={handleSnapPhoto}
+                  className="w-16 h-16 rounded-full border-4 border-white bg-amber-500 hover:bg-amber-600 active:scale-95 shadow-xl flex items-center justify-center text-white shrink-0"
+                  aria-label="Capture photograph"
+                >
+                  <Camera className="w-7 h-7" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSampleFieldPhoto}
+                  className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-xl text-[11px] font-bold text-emerald-900 flex items-center gap-1.5 shadow-2xs transition"
+                  title="கள மாதிரி படம் உருவாக்க"
+                >
+                  <span>🌾 மாதிரி படம்</span>
+                </button>
+              </div>
+
+              <p className="text-[11px] font-semibold text-gray-600">
+                {photoStep === 'WIDE' ? 'படம் 1 (முழுத்தோற்றம்) எடுக்க அல்லது பதிவேற்றவும்' : 'படம் 2 (தடம்/அடையாளம்) எடுக்க அல்லது பதிவேற்றவும்'}
               </p>
             </div>
           </div>
@@ -837,28 +1023,39 @@ export function App() {
 
               {/* Actions */}
               <div className="space-y-2.5">
-                <a
-                  href={dossierPdfUrl || '/api/v1/dossier/sample/pdf'}
-                  target="_blank"
-                  rel="noreferrer"
+                <button
+                  type="button"
+                  onClick={() => setShowPdfViewerModal(true)}
                   className="w-full py-3.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-2xl shadow-md transition flex items-center justify-center gap-2 text-sm"
                 >
-                  <Download className="w-4 h-4" />
-                  <span>PDF சான்றிதழ் பதிவிறக்கம் (Download PDF)</span>
-                </a>
-
-                <button
-                  onClick={() => {
-                    const text = encodeURIComponent(
-                      `வணக்கம். எனது பயிர்ச்சேத சான்றாவணம் (Dossier ID: ${createdIncidentCode}) தயாராகியுள்ளது.`
-                    );
-                    window.open(`https://wa.me/?text=${text}`, '_blank');
-                  }}
-                  className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-2xl shadow-sm transition flex items-center justify-center gap-2 text-sm"
-                >
-                  <Share2 className="w-4 h-4" />
-                  <span>WhatsApp வழியாக பகிரவும் (Share)</span>
+                  <Eye className="w-4 h-4" />
+                  <span>சான்றாவணத்தை நேரடியாக பார் (View Dossier In-App)</span>
                 </button>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <a
+                    href={dossierPdfUrl || '/api/v1/dossier/sample/pdf'}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="py-3 bg-white hover:bg-gray-50 border border-emerald-300 text-emerald-800 font-bold rounded-xl shadow-2xs transition flex items-center justify-center gap-1.5 text-xs"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>PDF பதிவிறக்கு</span>
+                  </a>
+
+                  <button
+                    onClick={() => {
+                      const text = encodeURIComponent(
+                        `வணக்கம். எனது பயிர்ச்சேத சான்றாவணம் (Dossier ID: ${createdIncidentCode || 'RPD-2026-VAL-001'}) தயாராகியுள்ளது.`
+                      );
+                      window.open(`https://wa.me/?text=${text}`, '_blank');
+                    }}
+                    className="py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-2xs transition flex items-center justify-center gap-1.5 text-xs"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                    <span>WhatsApp பகிர்வு</span>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1064,6 +1261,112 @@ export function App() {
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isLoadingDiag ? 'animate-spin' : ''}`} />
                 <span>மீண்டும் இணைப்பை சோதி (Test Connection Again)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL: MOBILE / REMOTE SHARE ACCESS */}
+      {/* ============================================================== */}
+      {showShareModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-5 w-full max-w-sm shadow-2xl text-xs space-y-3">
+            <div className="flex items-center justify-between border-b pb-2">
+              <h3 className="text-sm font-bold text-gray-900 flex items-center gap-1.5">
+                <Smartphone className="w-4 h-4 text-emerald-700" />
+                <span>மொபைலில் அணுக (Open on Mobile)</span>
+              </h3>
+              <button
+                onClick={() => setShowShareModal(false)}
+                className="p-1 hover:bg-gray-100 rounded-full"
+              >
+                <XCircle className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
+
+            <p className="text-[11px] text-gray-600 leading-relaxed">
+              உங்கள் மொபைல் போனை இதே வைஃபை (Wi-Fi) நெட்வொர்க்கில் இணைத்து, பிரவுசரில் கீழேயுள்ள இணைப்பை திறக்கவும்:
+            </p>
+
+            <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-center justify-between">
+              <div className="overflow-hidden">
+                <span className="text-[10px] text-emerald-800 font-semibold block">உள்ளூர் நெட்வொர்க் இணைப்பு (Local Wi-Fi):</span>
+                <span className="font-mono font-bold text-emerald-950 text-xs truncate select-all">
+                  http://10.230.118.81:5173
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText('http://10.230.118.81:5173');
+                  alert('இணைப்பு நகலெடுக்கப்பட்டது! (Link copied)');
+                }}
+                className="px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-[10px] shrink-0"
+              >
+                Copy Link
+              </button>
+            </div>
+
+            <div className="p-2.5 bg-gray-50 rounded-xl text-[11px] text-gray-500 space-y-1">
+              <p>✓ மொபைல் மைக்ரோஃபோன் வழியாக நேரடியாக தமிழில் பேசலாம்</p>
+              <p>✓ மொபைல் கேமரா மற்றும் நேரடி GPS இருப்பிடத்தைப் பதிவு செய்யலாம்</p>
+              <p>✓ உருவான PDF சான்றாவணத்தை உடனே பதிவிறக்கலாம்</p>
+            </div>
+
+            <button
+              onClick={() => setShowShareModal(false)}
+              className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold rounded-xl"
+            >
+              சரி (Done)
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL: IN-APP PDF DOSSIER PREVIEW */}
+      {/* ============================================================== */}
+      {showPdfViewerModal && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+            <div className="p-3.5 border-b flex items-center justify-between bg-emerald-800 text-white">
+              <div className="flex items-center gap-1.5">
+                <FileText className="w-4 h-4 text-emerald-300" />
+                <h3 className="text-sm font-bold">சான்றாவண நேரடி முன்னோட்டம் (Dossier PDF)</h3>
+              </div>
+              <button
+                onClick={() => setShowPdfViewerModal(false)}
+                className="p-1 hover:bg-emerald-700 rounded-full transition"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 p-2 bg-gray-100 overflow-hidden">
+              <iframe
+                src={dossierPdfUrl || '/api/v1/dossier/sample/pdf'}
+                title="Dossier PDF Preview"
+                className="w-full h-[65vh] rounded-xl border border-gray-300 bg-white shadow-inner"
+              />
+            </div>
+
+            <div className="p-3 border-t bg-white flex items-center justify-between gap-2 text-xs">
+              <a
+                href={dossierPdfUrl || '/api/v1/dossier/sample/pdf'}
+                target="_blank"
+                rel="noreferrer"
+                className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl flex items-center gap-1.5 transition"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>புதிய பக்கத்தில் திற / பதிவிறக்கு</span>
+              </a>
+
+              <button
+                onClick={() => setShowPdfViewerModal(false)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition"
+              >
+                மூடு (Close)
               </button>
             </div>
           </div>

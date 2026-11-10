@@ -42,6 +42,8 @@ backend/.env
 # Databases & Media storage
 *.db
 *.sqlite3
+storage/
+static/
 backend/storage/
 backend/static/uploads/
 backend/static/dossiers/
