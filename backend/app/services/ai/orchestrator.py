@@ -43,23 +43,30 @@ class ConversationOrchestrator:
         )
 
         # 4. Formulate spoken response & next step
-        review_flags = [f for f in contradictions if f.severity in ["REVIEW", "CRITICAL", "WARNING"]]
-        if review_flags:
-            spoken_text = f"வணக்கம் {farmer_name} ஐயா. {review_flags[0].prompt_ta}"
-            next_step = "REVIEW_DETAILS"
-        else:
-            # All clear
-            crop_name = extracted.crop_damaged_tamil or extracted.crop_damaged.value
-            animal_name = extracted.wildlife_species_tamil or extracted.wildlife_species.value
-            unit_name = extracted.damage_unit_tamil or extracted.damage_unit.value
-            qty_int = int(extracted.damage_quantity) if extracted.damage_quantity.is_integer() else extracted.damage_quantity
-
+        if not transcript or not transcript.strip():
             spoken_text = (
-                f"வணக்கம் {farmer_name} ஐயா. உங்கள் {qty_int} {unit_name} {crop_name} "
-                f"{animal_name}யால் சேதமடைந்தது பதிவாகியுள்ளது. "
-                f"இப்போது உங்கள் தோட்டத்தில் சேதமடைந்த இடத்தை ஒரு புகைப்படம் எடுக்கவும்."
+                f"வணக்கம் {farmer_name} ஐயா. உங்கள் குரல் தெளிவாக கேட்கவில்லை. "
+                f"மைக்கை அழுத்திப் பிடித்து எந்த விலங்கு எந்தப் பயிரை சேதப்படுத்தியது என்று மீண்டும் பேசவும்."
             )
-            next_step = "CAPTURE_WIDE_PHOTO"
+            next_step = "RECORD_VOICE_AGAIN"
+        else:
+            review_flags = [f for f in contradictions if f.severity in ["REVIEW", "CRITICAL", "WARNING"]]
+            if review_flags:
+                spoken_text = f"வணக்கம் {farmer_name} ஐயா. {review_flags[0].prompt_ta}"
+                next_step = "REVIEW_DETAILS"
+            else:
+                # All clear
+                crop_name = extracted.crop_damaged_tamil or extracted.crop_damaged.value
+                animal_name = extracted.wildlife_species_tamil or extracted.wildlife_species.value
+                unit_name = extracted.damage_unit_tamil or extracted.damage_unit.value
+                qty_int = int(extracted.damage_quantity) if extracted.damage_quantity.is_integer() else extracted.damage_quantity
+
+                spoken_text = (
+                    f"வணக்கம் {farmer_name} ஐயா. உங்கள் {qty_int} {unit_name} {crop_name} "
+                    f"{animal_name}யால் சேதமடைந்தது பதிவாகியுள்ளது. "
+                    f"இப்போது உங்கள் தோட்டத்தில் சேதமடைந்த இடத்தை ஒரு புகைப்படம் எடுக்கவும்."
+                )
+                next_step = "CAPTURE_WIDE_PHOTO"
 
         # 5. Synthesize spoken response via Gnani Timbre v3.0 (or mock)
         tts_audio = await voice_service.synthesize_speech(

@@ -137,7 +137,7 @@ class GnaniVoiceService(VoiceGateway):
         payload = {
             "text": text,
             "model": "timbre-v3.0",
-            "voice": "Kavitha",
+            "voice": "Lakshmi",
             "language": language_code,
             "speed": speed
         }
