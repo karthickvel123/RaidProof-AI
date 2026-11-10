@@ -14,10 +14,10 @@ export const PushToTalkMic: React.FC<PushToTalkMicProps> = ({
   isProcessing,
   onStart,
   onStop,
-  language = 'ta'
+  language = 'en'
 }) => {
   return (
-    <div className="flex flex-col items-center justify-center my-6">
+    <div className="flex flex-col items-center justify-center my-4">
       <div className="relative flex items-center justify-center">
         {/* Pulsing ring animation when recording */}
         {isRecording && (
@@ -39,37 +39,36 @@ export const PushToTalkMic: React.FC<PushToTalkMicProps> = ({
             onStop();
           }}
           disabled={isProcessing}
-          className={`relative z-10 w-24 h-24 rounded-full flex flex-col items-center justify-center shadow-xl transition-all duration-200 select-none ${
+          className={`relative z-10 w-20 h-20 rounded-full flex flex-col items-center justify-center shadow-lg transition-all duration-200 select-none cursor-pointer ${
             isProcessing
-              ? 'bg-gray-400 cursor-not-allowed'
+              ? 'bg-slate-400 cursor-not-allowed'
               : isRecording
-              ? 'bg-amber-600 scale-110 shadow-amber-600/40'
-              : 'bg-emerald-700 hover:bg-emerald-800 active:scale-95 shadow-emerald-900/30'
+              ? 'bg-amber-600 scale-105 shadow-amber-600/40'
+              : 'bg-emerald-700 hover:bg-emerald-800 active:scale-95 shadow-emerald-900/25'
           }`}
           aria-label="Push to talk microphone"
         >
           {isProcessing ? (
-            <Loader2 className="w-10 h-10 text-white animate-spin" />
+            <Loader2 className="w-8 h-8 text-white animate-spin" />
           ) : (
-            <Mic className={`w-10 h-10 text-white ${isRecording ? 'animate-bounce' : ''}`} />
+            <Mic className={`w-8 h-8 text-white ${isRecording ? 'animate-bounce' : ''}`} />
           )}
         </button>
       </div>
 
-      <p className="mt-4 font-medium text-center text-gray-800 select-none">
+      <p className="mt-3 text-xs font-semibold text-center text-slate-700 select-none">
         {isProcessing
           ? language === 'ta'
-            ? 'அறிக்கை உருவாக்கப்படுகிறது...'
-            : 'Processing Voice...'
+            ? 'குரல் பகுப்பாய்வு செய்யப்படுகிறது...'
+            : 'Processing Voice Statement...'
           : isRecording
           ? language === 'ta'
-            ? '🔴 பேசவும், கேட்கிறேன்...'
-            : '🔴 Listening... Release to submit'
+            ? 'பேசவும்... விட்டுவிட்டால் சமர்ப்பிக்கப்படும்'
+            : 'Listening... Release to submit'
           : language === 'ta'
-          ? 'அழுத்திப் பிடித்து பேசவும் (Hold to Speak)'
+          ? 'அழுத்திப் பிடித்து பேசவும்'
           : 'Press and Hold to Speak'}
       </p>
     </div>
   );
 };
-
