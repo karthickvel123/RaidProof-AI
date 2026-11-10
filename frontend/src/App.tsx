@@ -18,7 +18,8 @@ import {
   Eye,
   Upload,
   Smartphone,
-  FileText
+  FileText,
+  MapPin
 } from 'lucide-react';
 
 import { useAudioRecorder } from './hooks/useAudioRecorder';
@@ -27,9 +28,10 @@ import { PushToTalkMic } from './components/PushToTalkMic';
 import { AudioWaveform } from './components/AudioWaveform';
 import { SpokenAudioPlayer } from './components/SpokenAudioPlayer';
 import { GPSIndicator } from './components/GPSIndicator';
+import { LocationMapPicker } from './components/LocationMapPicker';
 import { offlineDb, type LocalIncidentDraft } from './services/db/offlineDb';
 
-type Step = 'DASHBOARD' | 'VOICE' | 'CAMERA' | 'CHECKLIST' | 'DOSSIER';
+type Step = 'DASHBOARD' | 'FIELD_REPORT' | 'VOICE' | 'CAMERA' | 'CHECKLIST' | 'DOSSIER';
 
 interface FarmerProfile {
   name: string;
@@ -90,11 +92,27 @@ export function App() {
   // Camera & Real Evidence Photos
   const camera = useCameraGPS();
   const [photoStep, setPhotoStep] = useState<'WIDE' | 'SPOOR'>('WIDE');
+  const [activePhotoUploadSlot, setActivePhotoUploadSlot] = useState<'WIDE' | 'SPOOR'>('WIDE');
   const [widePhotoUrl, setWidePhotoUrl] = useState<string | null>(null);
   const [widePhotoBlob, setWidePhotoBlob] = useState<Blob | null>(null);
   const [spoorPhotoUrl, setSpoorPhotoUrl] = useState<string | null>(null);
   const [spoorPhotoBlob, setSpoorPhotoBlob] = useState<Blob | null>(null);
   const [capturedGps, setCapturedGps] = useState<{ latitude: number; longitude: number; accuracy: number; isLocked: boolean } | null>(null);
+
+  // Field Report Location & Map State (matching user mockup)
+  const [locationName, setLocationName] = useState('வால்பாறை மேற்கு தோட்டம் (Valparai Farm)');
+  const [description, setDescription] = useState('');
+  const [mapCoords, setMapCoords] = useState<{
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+    source: 'consent_device_gps' | 'farmer_map_pin';
+  }>({
+    latitude: 10.3275,
+    longitude: 76.9554,
+    accuracy: 5.0,
+    source: 'farmer_map_pin'
+  });
 
   // Document Checklist (Reflects actual farmer selections, unselected by default)
   const [checklist, setChecklist] = useState({
@@ -187,6 +205,9 @@ export function App() {
 
       const data = await res.json();
       setTranscript(data.transcript);
+      if (!description) {
+        setDescription(data.transcript);
+      }
       setExtractedData(data.extracted);
       setContradictions(data.contradictions || []);
       setSpokenAudioUrl(data.spoken_response_audio_url);
@@ -238,25 +259,49 @@ export function App() {
     await submitAudioTurn(blob, scenarioText);
   };
 
-  // Handle local file upload for photo
+  // Handle local file upload for photo (handles both step-by-step and unified field report)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onload = (event) => {
         const dataUrl = event.target?.result as string;
-        if (photoStep === 'WIDE') {
-          setWidePhotoUrl(dataUrl);
-          setWidePhotoBlob(file);
-          setPhotoStep('SPOOR');
+        if (currentStep === 'FIELD_REPORT') {
+          if (activePhotoUploadSlot === 'WIDE') {
+            setWidePhotoUrl(dataUrl);
+            setWidePhotoBlob(file);
+          } else {
+            setSpoorPhotoUrl(dataUrl);
+            setSpoorPhotoBlob(file);
+          }
         } else {
-          setSpoorPhotoUrl(dataUrl);
-          setSpoorPhotoBlob(file);
-          camera.stopCamera();
-          setCurrentStep('CHECKLIST');
+          if (photoStep === 'WIDE') {
+            setWidePhotoUrl(dataUrl);
+            setWidePhotoBlob(file);
+            setPhotoStep('SPOOR');
+          } else {
+            setSpoorPhotoUrl(dataUrl);
+            setSpoorPhotoBlob(file);
+            camera.stopCamera();
+            setCurrentStep('CHECKLIST');
+          }
         }
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  // Simulate realistic field photo for specific slot
+  const handleSimulateSamplePhoto = async (slot: 'WIDE' | 'SPOOR') => {
+    const photo = await camera.capturePhoto();
+    if (photo) {
+      if (slot === 'WIDE') {
+        setWidePhotoUrl(photo.dataUrl);
+        setWidePhotoBlob(photo.blob);
+      } else {
+        setSpoorPhotoUrl(photo.dataUrl);
+        setSpoorPhotoBlob(photo.blob);
+      }
     }
   };
 
@@ -322,6 +367,10 @@ export function App() {
   // Generate Final Dossier with real farmer data and real evidence photos
   const handleGenerateDossier = async () => {
     const clientDraftId = 'draft_' + Date.now();
+    const consentLat = mapCoords.latitude ?? (capturedGps?.isLocked ? capturedGps.latitude : null);
+    const consentLng = mapCoords.longitude ?? (capturedGps?.isLocked ? capturedGps.longitude : null);
+    const consentAcc = mapCoords.accuracy ?? (capturedGps?.isLocked ? capturedGps.accuracy : null);
+
     const payload = {
       farmer_id: profile.phone || 'farmer-01',
       client_draft_id: clientDraftId,
@@ -333,18 +382,18 @@ export function App() {
       patta_number: profile.pattaNumber,
       survey_number: profile.surveyNumber,
       area_acres: profile.acres,
-      consent_latitude: capturedGps?.isLocked ? capturedGps.latitude : null,
-      consent_longitude: capturedGps?.isLocked ? capturedGps.longitude : null,
-      consent_gps_accuracy: capturedGps?.isLocked ? capturedGps.accuracy : null,
+      consent_latitude: consentLat,
+      consent_longitude: consentLng,
+      consent_gps_accuracy: consentAcc,
       checklist: checklist,
       wildlife_species: extractedData?.wildlife_species || 'ELEPHANT',
       wildlife_species_tamil: extractedData?.wildlife_species_tamil || 'காட்டு யானை',
       crop_damaged: extractedData?.crop_damaged || 'BANANA',
       crop_damaged_tamil: extractedData?.crop_damaged_tamil || 'வாழை',
-      damage_quantity: extractedData?.damage_quantity || 10,
+      damage_quantity: extractedData?.damage_quantity || 15,
       damage_unit: extractedData?.damage_unit || 'TREES',
       damage_unit_tamil: extractedData?.damage_unit_tamil || 'மரங்கள்',
-      raw_voice_transcript: transcript || 'நேத்து ராத்திரி காட்டு யானை வந்து பயிர்களை சேதப்படுத்தியது.'
+      raw_voice_transcript: transcript || description || 'நேத்து ராத்திரி வால்பாறை தோட்டத்தில் ஒரு காட்டு யானை உள்ளே நுழைந்து 15 வாழை மரங்களை வேரோடு சாய்த்து தின்றுவிட்டது.'
     };
 
     try {
@@ -365,10 +414,10 @@ export function App() {
           form.append('photo_file', widePhotoBlob, 'wide_photo.jpg');
           form.append('incident_id', incidentId);
           form.append('photo_type', 'WIDE_ANGLE');
-          if (capturedGps?.isLocked) {
-            form.append('latitude', String(capturedGps.latitude));
-            form.append('longitude', String(capturedGps.longitude));
-            form.append('accuracy', String(capturedGps.accuracy));
+          if (consentLat !== null && consentLng !== null) {
+            form.append('latitude', String(consentLat));
+            form.append('longitude', String(consentLng));
+            form.append('accuracy', String(consentAcc || 5.0));
           }
           await fetch('/api/v1/evidence/upload', { method: 'POST', body: form }).catch(console.warn);
         }
@@ -378,10 +427,10 @@ export function App() {
           form.append('photo_file', spoorPhotoBlob, 'spoor_photo.jpg');
           form.append('incident_id', incidentId);
           form.append('photo_type', 'CLOSE_UP_SPOOR');
-          if (capturedGps?.isLocked) {
-            form.append('latitude', String(capturedGps.latitude));
-            form.append('longitude', String(capturedGps.longitude));
-            form.append('accuracy', String(capturedGps.accuracy));
+          if (consentLat !== null && consentLng !== null) {
+            form.append('latitude', String(consentLat));
+            form.append('longitude', String(consentLng));
+            form.append('accuracy', String(consentAcc || 5.0));
           }
           await fetch('/api/v1/evidence/upload', { method: 'POST', body: form }).catch(console.warn);
         }
@@ -408,7 +457,7 @@ export function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-gray-900 pb-12 flex flex-col items-center">
       {/* Top Header */}
-      <header className="w-full max-w-md bg-emerald-800 text-white p-3.5 shadow-md flex items-center justify-between sticky top-0 z-30">
+      <header className="w-full max-w-5xl bg-emerald-800 text-white p-3.5 shadow-md flex items-center justify-between sticky top-0 z-30 md:rounded-b-2xl">
         <div className="flex items-center gap-2">
           {currentStep !== 'DASHBOARD' && (
             <button
@@ -422,7 +471,7 @@ export function App() {
             <h1 className="font-bold text-base leading-tight flex items-center gap-1.5">
               <span>🌾</span> RaidProof AI
             </h1>
-            <p className="text-[10px] text-emerald-200">சுய சான்றாவண உதவியாளர்</p>
+            <p className="text-[10px] text-emerald-200">சுய சான்றாவண உதவியாளர் · Self-Declaration Dossier</p>
           </div>
         </div>
 
@@ -463,19 +512,19 @@ export function App() {
       </header>
 
       {/* Regulatory Notice Banner */}
-      <div className="w-full max-w-md bg-amber-50 border-b border-amber-200 px-4 py-1 text-center">
+      <div className="w-full max-w-5xl bg-amber-50 border-b border-amber-200 px-4 py-1 text-center">
         <p className="text-[10px] text-amber-900 font-medium leading-tight">
           ⚠️ <b>சுய அறிவிப்பு சான்றாவணம்:</b> இது அதிகாரப்பூர்வ அரசு படிவம் அல்லது இழப்பீட்டு உத்தரவாதம் அல்ல. விவசாயி சான்றுகளைத் தொகுக்கும் செயலி மட்டுமே.
         </p>
       </div>
 
       {/* Main Container */}
-      <main className="w-full max-w-md px-4 pt-3 flex-1 flex flex-col">
+      <main className="w-full max-w-5xl px-3 md:px-4 pt-3 flex-1 flex flex-col">
         {/* ============================================================== */}
         {/* STEP 1: DASHBOARD */}
         {/* ============================================================== */}
         {currentStep === 'DASHBOARD' && (
-          <div className="space-y-3.5">
+          <div className="max-w-xl mx-auto w-full space-y-3.5">
             {/* Farmer Profile Card (Editable, No Hardcoding) */}
             <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-gray-200">
               <div className="flex items-center justify-between border-b pb-2 mb-2">
@@ -531,13 +580,43 @@ export function App() {
                   setExtractedData(null);
                   setVoiceError(null);
                   setSavedAudioBlob(null);
-                  setCurrentStep('VOICE');
+                  setCurrentStep('FIELD_REPORT');
                 }}
                 className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 active:scale-98 text-emerald-950 font-bold rounded-2xl shadow-md transition text-sm flex items-center justify-center gap-2"
               >
-                <span>புதிய சேத விபரம் பதிவு செய்</span>
+                <span>புதிய கள அறிக்கை பதிவு (Create Field Report)</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
+
+              <div className="flex gap-2 mt-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTranscript("");
+                    setExtractedData(null);
+                    setVoiceError(null);
+                    setSavedAudioBlob(null);
+                    setCurrentStep('FIELD_REPORT');
+                  }}
+                  className="flex-1 py-2 bg-emerald-600/80 hover:bg-emerald-600 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition"
+                >
+                  <MapPin className="w-3.5 h-3.5" />
+                  <span>வரைபட கள அறிக்கை (Map & Form)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTranscript("");
+                    setExtractedData(null);
+                    setVoiceError(null);
+                    setSavedAudioBlob(null);
+                    setCurrentStep('VOICE');
+                  }}
+                  className="py-2 px-3 bg-white/20 hover:bg-white/30 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1 transition"
+                >
+                  <span>படிப் படியாக (Steps)</span>
+                </button>
+              </div>
             </div>
 
             {/* Mode & Diagnostic Banner */}
@@ -623,10 +702,409 @@ export function App() {
         )}
 
         {/* ============================================================== */}
+        {/* STEP: CREATE FIELD REPORT (Unified Map + Voice + Evidence Form) */}
+        {/* ============================================================== */}
+        {currentStep === 'FIELD_REPORT' && (
+          <div className="space-y-4 pb-6">
+            {/* Top Subheader inspired by Mangrove Guardian AI / Create Field Report */}
+            <div className="bg-white rounded-3xl p-4 md:p-5 shadow-xs border border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div>
+                <span className="text-[10px] font-bold tracking-wider uppercase text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                  RaidProof AI · Field Incident Workflow
+                </span>
+                <h2 className="text-xl md:text-2xl font-bold text-gray-900 mt-1">
+                  Create Field Report (கள அறிக்கை பதிவு)
+                </h2>
+                <p className="text-xs text-gray-600 mt-0.5">
+                  Pin the location, attach evidence, and trigger AI damage analysis. (இருப்பிடத்தை வரைபடத்தில் குறித்து, சான்றுகளை இணைத்து சுய அறிக்கை தயார் செய்யவும்).
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep('DASHBOARD')}
+                  className="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs flex items-center gap-1.5 transition"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  <span>Back (முகப்பு)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTranscript('');
+                    setDescription('');
+                    setExtractedData(null);
+                    setWidePhotoUrl(null);
+                    setWidePhotoBlob(null);
+                    setSpoorPhotoUrl(null);
+                    setSpoorPhotoBlob(null);
+                  }}
+                  className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl font-bold text-xs transition"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
+
+            {/* Split Screen Grid: Map on the left, Reporting & Evidence Form on the right */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+              {/* LEFT COLUMN: Interactive Map & Location Details */}
+              <div className="lg:col-span-6 space-y-4">
+                {/* Interactive Leaflet Location Map */}
+                <LocationMapPicker
+                  latitude={mapCoords.latitude}
+                  longitude={mapCoords.longitude}
+                  accuracy={mapCoords.accuracy}
+                  source={mapCoords.source}
+                  onChange={(lat, lng, acc, src) => {
+                    setMapCoords({ latitude: lat, longitude: lng, accuracy: acc, source: src });
+                  }}
+                  onRequestDeviceGps={() => {
+                    if (camera.gps.isLocked) {
+                      setMapCoords({
+                        latitude: camera.gps.latitude,
+                        longitude: camera.gps.longitude,
+                        accuracy: camera.gps.accuracy,
+                        source: 'consent_device_gps'
+                      });
+                    } else {
+                      navigator.geolocation?.getCurrentPosition(
+                        (pos) => {
+                          setMapCoords({
+                            latitude: pos.coords.latitude,
+                            longitude: pos.coords.longitude,
+                            accuracy: pos.coords.accuracy,
+                            source: 'consent_device_gps'
+                          });
+                        },
+                        (err) => {
+                          alert('GPS இருப்பிடம் பெற முடியவில்லை: ' + err.message);
+                        },
+                        { enableHighAccuracy: true, timeout: 10000 }
+                      );
+                    }
+                  }}
+                />
+
+                {/* Location Name & Description Inputs (as seen in user screenshot) */}
+                <div className="bg-white rounded-3xl p-4 border border-gray-200 shadow-xs space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">
+                      Location Name (இடத்தின் பெயர் / தோட்டம்)
+                    </label>
+                    <input
+                      type="text"
+                      value={locationName}
+                      onChange={(e) => setLocationName(e.target.value)}
+                      placeholder="e.g. Mangrove Forest A / வால்பாறை மேற்கு தோட்டம்"
+                      className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium focus:bg-white focus:border-emerald-600 outline-none transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">
+                      Description (சேத விவர விளக்கம் / நிகழ்வு விபரம்)
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="Describe current conditions or record speech..."
+                      className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium focus:bg-white focus:border-emerald-600 outline-none transition"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* RIGHT COLUMN: Voice Interview, Photo Upload, Checklist, Submit */}
+              <div className="lg:col-span-6 space-y-4">
+                {/* 1. Voice Interview Box */}
+                <div className="bg-white rounded-3xl p-4 border border-gray-200 shadow-xs space-y-3">
+                  <div className="flex items-center justify-between border-b pb-2">
+                    <span className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+                      <span className="text-base">🎙️</span>
+                      <span>குரல் வழி சேதப் பதிவு (Voice Incident Reporting)</span>
+                    </span>
+                    <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                      GNANI PRISMA STT
+                    </span>
+                  </div>
+
+                  {/* Push To Talk Mic & Waveform */}
+                  <PushToTalkMic
+                    isRecording={isRecording}
+                    isProcessing={isProcessingVoice}
+                    onStart={startRecording}
+                    onStop={handleMicStop}
+                    language={language}
+                  />
+
+                  <AudioWaveform volume={volume} isRecording={isRecording} />
+
+                  {/* 1-Click Realistic Scenarios */}
+                  <div className="p-2.5 bg-emerald-50/70 border border-emerald-200 rounded-2xl">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[11px] font-bold text-emerald-950 flex items-center gap-1">
+                        <span>⚡</span> மாதிரி விவசாயி குரல் சூழல் (1-Click Test Scenarios):
+                      </span>
+                      <span className="text-[9px] bg-emerald-200/60 text-emerald-900 px-1.5 py-0.5 rounded font-bold">
+                        REAL GNANI VOICE
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-1.5 mt-1.5">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleScenarioClick(
+                            'நேத்து ராத்திரி வால்பாறை தோட்டத்தில் ஒரு காட்டு யானை உள்ளே நுழைந்து 15 வாழை மரங்களை வேரோடு சாய்த்து தின்றுவிட்டது.'
+                          )
+                        }
+                        disabled={isProcessingVoice}
+                        className="p-2 rounded-xl bg-white hover:bg-emerald-100/60 border border-emerald-200 text-left transition flex items-center justify-between text-[11px] shadow-2xs group"
+                      >
+                        <div>
+                          <span className="font-bold text-emerald-950 block">🐘 வால்பாறை: காட்டு யானை 15 வாழை மரங்கள்</span>
+                          <span className="text-[10px] text-gray-500">"நேத்து ராத்திரி காட்டு யானை 15 வாழை மரங்களை வேரோடு சாய்த்தது..."</span>
+                        </div>
+                        <span className="text-emerald-700 font-bold text-xs group-hover:translate-x-0.5 transition-transform">▶</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleScenarioClick(
+                            'பொள்ளாச்சி தோட்டத்தில் முந்தாநாள் இரவு 6 காட்டுப்பன்றிகள் வந்து அரை ஏக்கர் நிலக்கடலை பயிரை கிளறி நாசம் செய்துவிட்டது.'
+                          )
+                        }
+                        disabled={isProcessingVoice}
+                        className="p-2 rounded-xl bg-white hover:bg-emerald-100/60 border border-emerald-200 text-left transition flex items-center justify-between text-[11px] shadow-2xs group"
+                      >
+                        <div>
+                          <span className="font-bold text-emerald-950 block">🐗 பொள்ளாச்சி: காட்டுப்பன்றிகள் நிலக்கடலை சேதம்</span>
+                          <span className="text-[10px] text-gray-500">"முந்தாநாள் இரவு 6 காட்டுப்பன்றிகள் வந்து நிலக்கடலையை கிளறியது..."</span>
+                        </div>
+                        <span className="text-emerald-700 font-bold text-xs group-hover:translate-x-0.5 transition-transform">▶</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleScenarioClick(
+                            'நீலகிரி மலையடிவாரத்தில் காட்டெருமை கூட்டம் வந்து 25 தேயிலை செடிகளையும் வேலியையும் முட்டி உடைத்துவிட்டது.'
+                          )
+                        }
+                        disabled={isProcessingVoice}
+                        className="p-2 rounded-xl bg-white hover:bg-emerald-100/60 border border-emerald-200 text-left transition flex items-center justify-between text-[11px] shadow-2xs group"
+                      >
+                        <div>
+                          <span className="font-bold text-emerald-950 block">🐂 நீலகிரி: காட்டெருமை தேயிலை செடி சேதம்</span>
+                          <span className="text-[10px] text-gray-500">"காட்டெருமை கூட்டம் வந்து 25 தேயிலை செடிகளை முட்டி உடைத்தது..."</span>
+                        </div>
+                        <span className="text-emerald-700 font-bold text-xs group-hover:translate-x-0.5 transition-transform">▶</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Transcript */}
+                  {transcript && (
+                    <div className="p-3 bg-gray-50 rounded-2xl border border-gray-200 text-xs">
+                      <span className="text-[10px] font-bold text-gray-500 block mb-0.5">நீங்கள் பேசியது (Voice Transcript):</span>
+                      <p className="italic text-gray-900 font-medium leading-relaxed">"{transcript}"</p>
+                    </div>
+                  )}
+
+                  {/* Timbre Spoken Response */}
+                  {spokenAudioUrl && (
+                    <SpokenAudioPlayer
+                      audioUrl={spokenAudioUrl}
+                      autoPlay={true}
+                      label="கணினியின் குரல் பதில் (Timbre Voice Response)"
+                    />
+                  )}
+                </div>
+
+                {/* 2. Extracted Incident Details */}
+                {extractedData && (
+                  <div className="bg-white rounded-3xl p-4 border border-emerald-200 shadow-xs space-y-2">
+                    <span className="text-xs font-bold text-emerald-900 block">AI பகுப்பாய்வு விபரங்கள் (Extracted Details):</span>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="p-2 bg-emerald-50/60 rounded-xl border border-emerald-100">
+                        <span className="text-gray-500 text-[10px] block">விலங்கு (Species):</span>
+                        <span className="font-bold text-gray-900">{extractedData.wildlife_species_tamil || extractedData.wildlife_species}</span>
+                      </div>
+                      <div className="p-2 bg-emerald-50/60 rounded-xl border border-emerald-100">
+                        <span className="text-gray-500 text-[10px] block">பயிர் (Crop):</span>
+                        <span className="font-bold text-gray-900">{extractedData.crop_damaged_tamil || extractedData.crop_damaged}</span>
+                      </div>
+                      <div className="p-2 bg-emerald-50/60 rounded-xl border border-emerald-100">
+                        <span className="text-gray-500 text-[10px] block">சேத அளவு (Quantity):</span>
+                        <span className="font-bold text-emerald-800">{extractedData.damage_quantity} {extractedData.damage_unit_tamil || 'மரங்கள்'}</span>
+                      </div>
+                      <div className="p-2 bg-emerald-50/60 rounded-xl border border-emerald-100">
+                        <span className="text-gray-500 text-[10px] block">நேரம் (Time):</span>
+                        <span className="font-bold text-gray-900">{extractedData.incident_time_approx || 'இரவு'}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. Photo Evidence Upload (Wide + Spoor) */}
+                <div className="bg-white rounded-3xl p-4 border border-gray-200 shadow-xs space-y-3">
+                  <div className="flex items-center justify-between border-b pb-2">
+                    <span className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+                      <Camera className="w-4 h-4 text-emerald-700" />
+                      <span>சான்று புகைப்படங்கள் (Evidence Photos)</span>
+                    </span>
+                    <span className="text-[10px] text-gray-500">2 படங்கள் தேவை (முழுத்தோற்றம் + தடம்)</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Slot 1: Wide Angle */}
+                    <div className="p-2.5 rounded-2xl border border-gray-200 bg-gray-50 text-center flex flex-col justify-between">
+                      <span className="text-[11px] font-bold text-gray-700 block mb-1.5">
+                        1. முழுத்தோற்ற படம் (Wide)
+                      </span>
+                      {widePhotoUrl ? (
+                        <div className="relative rounded-xl overflow-hidden aspect-[4/3] bg-black">
+                          <img src={widePhotoUrl} alt="Wide shot" className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWidePhotoUrl(null);
+                              setWidePhotoBlob(null);
+                            }}
+                            className="absolute top-1 right-1 bg-black/70 hover:bg-red-600 text-white rounded-full p-1 transition"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="aspect-[4/3] border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center p-2 text-gray-400 bg-white">
+                          <Upload className="w-5 h-5 mb-1 text-gray-300" />
+                          <span className="text-[10px]">இன்னும் இணைக்கப்படவில்லை</span>
+                        </div>
+                      )}
+                      <div className="flex gap-1.5 mt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActivePhotoUploadSlot('WIDE');
+                            fileInputRef.current?.click();
+                          }}
+                          className="flex-1 py-1.5 bg-white hover:bg-gray-100 border border-gray-300 rounded-lg text-[10px] font-bold text-gray-700 shadow-2xs transition"
+                        >
+                          Choose Image
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSimulateSamplePhoto('WIDE')}
+                          className="py-1.5 px-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg text-[10px] font-bold text-emerald-800 shadow-2xs transition"
+                          title="மாதிரி படம்"
+                        >
+                          🌾 மாதிரி
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Slot 2: Spoor / Close up */}
+                    <div className="p-2.5 rounded-2xl border border-gray-200 bg-gray-50 text-center flex flex-col justify-between">
+                      <span className="text-[11px] font-bold text-gray-700 block mb-1.5">
+                        2. விலங்கு தடம் (Spoor)
+                      </span>
+                      {spoorPhotoUrl ? (
+                        <div className="relative rounded-xl overflow-hidden aspect-[4/3] bg-black">
+                          <img src={spoorPhotoUrl} alt="Spoor shot" className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSpoorPhotoUrl(null);
+                              setSpoorPhotoBlob(null);
+                            }}
+                            className="absolute top-1 right-1 bg-black/70 hover:bg-red-600 text-white rounded-full p-1 transition"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="aspect-[4/3] border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center p-2 text-gray-400 bg-white">
+                          <Upload className="w-5 h-5 mb-1 text-gray-300" />
+                          <span className="text-[10px]">இன்னும் இணைக்கப்படவில்லை</span>
+                        </div>
+                      )}
+                      <div className="flex gap-1.5 mt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActivePhotoUploadSlot('SPOOR');
+                            fileInputRef.current?.click();
+                          }}
+                          className="flex-1 py-1.5 bg-white hover:bg-gray-100 border border-gray-300 rounded-lg text-[10px] font-bold text-gray-700 shadow-2xs transition"
+                        >
+                          Choose Image
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSimulateSamplePhoto('SPOOR')}
+                          className="py-1.5 px-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg text-[10px] font-bold text-emerald-800 shadow-2xs transition"
+                          title="மாதிரி படம்"
+                        >
+                          🌾 மாதிரி
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. Document Checklist */}
+                <div className="bg-white rounded-3xl p-4 border border-gray-200 shadow-xs space-y-2">
+                  <span className="text-xs font-bold text-gray-800 block">உங்களிடம் தயாராக உள்ள ஆவணங்கள் (Checklist):</span>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-[11px]">
+                    {[
+                      { key: 'patta', label: 'பட்டா நகல் (Patta)' },
+                      { key: 'adangal', label: 'அடங்கல் (Adangal)' },
+                      { key: 'bank', label: 'வங்கி புத்தகம் (Passbook)' },
+                      { key: 'aadhaar', label: 'ஆதார் அட்டை (Aadhaar)' },
+                      { key: 'witness', label: 'சாட்சிகள் (Witnesses)' }
+                    ].map((item) => (
+                      <label
+                        key={item.key}
+                        className={`p-2 rounded-xl border flex items-center gap-1.5 cursor-pointer transition ${
+                          (checklist as any)[item.key] ? 'bg-emerald-50 border-emerald-300 font-bold text-emerald-950' : 'bg-gray-50 border-gray-200 text-gray-600'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={(checklist as any)[item.key]}
+                          onChange={() => setChecklist((prev: any) => ({ ...prev, [item.key]: !prev[item.key] }))}
+                          className="rounded text-emerald-700"
+                        />
+                        <span className="truncate">{item.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 5. Submit Field Report & Generate Dossier Button */}
+                <button
+                  type="button"
+                  onClick={handleGenerateDossier}
+                  className="w-full py-4 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-2xl shadow-md transition flex items-center justify-center gap-2 text-sm"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>Submit Report & Generate Dossier (சுய சான்றாவணம் உருவாக்குக)</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ============================================================== */}
         {/* STEP 2: VOICE INTERVIEWER */}
         {/* ============================================================== */}
         {currentStep === 'VOICE' && (
-          <div className="flex-1 flex flex-col justify-between py-1">
+          <div className="max-w-xl mx-auto w-full flex-1 flex flex-col justify-between py-1">
             <div>
               <div className="text-center mb-2">
                 <span className="text-[11px] font-bold bg-emerald-100 text-emerald-800 px-3 py-0.5 rounded-full">
@@ -820,7 +1298,7 @@ export function App() {
         {/* STEP 3: CAMERA EVIDENCE */}
         {/* ============================================================== */}
         {currentStep === 'CAMERA' && (
-          <div className="flex-1 flex flex-col justify-between py-1">
+          <div className="max-w-xl mx-auto w-full flex-1 flex flex-col justify-between py-1">
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] font-bold bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full">
@@ -925,7 +1403,7 @@ export function App() {
         {/* STEP 4: DOCUMENT CHECKLIST (Reflects Actual Selections) */}
         {/* ============================================================== */}
         {currentStep === 'CHECKLIST' && (
-          <div className="flex-1 flex flex-col justify-between py-1">
+          <div className="max-w-xl mx-auto w-full flex-1 flex flex-col justify-between py-1">
             <div>
               <div className="text-center mb-2.5">
                 <span className="text-[11px] font-bold bg-emerald-100 text-emerald-800 px-3 py-0.5 rounded-full">
@@ -986,7 +1464,7 @@ export function App() {
         {/* STEP 5: OFFICIAL DOSSIER GENERATED */}
         {/* ============================================================== */}
         {currentStep === 'DOSSIER' && (
-          <div className="flex-1 flex flex-col justify-between py-1 text-center">
+          <div className="max-w-xl mx-auto w-full flex-1 flex flex-col justify-between py-1 text-center">
             <div>
               <div className="w-16 h-16 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center mx-auto mb-2 shadow-inner">
                 <CheckCircle2 className="w-8 h-8" />
